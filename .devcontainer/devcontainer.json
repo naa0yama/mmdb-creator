@@ -1,0 +1,74 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+{
+	"name": "Rust(${localWorkspaceFolderBasename})",
+	"build": {
+		"dockerfile": "../Dockerfile",
+		"target": "development",
+		"args": {
+			"TZ": "${localEnv:TZ:Asia/Tokyo}",
+			"USER_GID": "1100",
+			"USER_UID": "1100"
+		}
+	},
+	"initializeCommand": "./.devcontainer/initializeCommand.sh",
+	"postStartCommand": "./.devcontainer/postStartCommand.sh",
+	// Features to add to the dev container. More info: https://containers.dev/features.
+	"features": {},
+	// Add another local file mount.
+	"mounts": [
+		// Claude Code
+		"type=bind,source=${localEnv:HOME}/.claude,target=/home/cuser/.claude",
+		"type=bind,source=${localEnv:HOME}/.claude.json,target=/home/cuser/.claude.json",
+		// Git
+		"type=bind,source=${localEnv:HOME}/.gitconfig,target=/home/cuser/.gitconfig",
+		"type=bind,source=${localEnv:HOME}/.gitconfig.d,target=/home/cuser/.gitconfig.d",
+		// GitHub
+		"type=bind,source=${localEnv:HOME}/.config/gh,target=/home/cuser/.config/gh",
+		// Cross-project shared: ~/.local/bin (mise/openobserve binary, claude symlink)
+		"type=volume,source=devcontainer-shared-local-bin,target=/home/cuser/.local/bin",
+		// Cross-project shared: mise managed tool installs
+		"type=volume,source=devcontainer-shared-mise,target=/home/cuser/.local/share/mise",
+		// Cross-project shared: claude binary versions (symlink target of ~/.local/bin/claude)
+		"type=volume,source=devcontainer-shared-claude,target=/home/cuser/.local/share/claude"
+	],
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				// 										Rust Syntax, Rust Doc Viewer 同様の機能は rust-analyzer に含まれるので入れない
+				"dprint.dprint", // 					Dprint Code Formatter
+				"EditorConfig.EditorConfig", // 		EditorConfig for VS Code
+				"MermaidChart.vscode-mermaid-chart", // Mermaid
+				"ms-azuretools.vscode-containers", // 	Container Tools
+				"ms-vscode.live-server", // 			Live Preview
+				"redhat.vscode-yaml", // 				YAML
+				"rust-lang.rust-analyzer", // 			rust-analyzer
+				"ryanluker.vscode-coverage-gutters", // Coverage Gutters
+				"tamasfe.even-better-toml", // 			Even Better TOML
+				"usernamehw.errorlens", // 				Error Lens
+				"vadimcn.vscode-lldb" // 				CodeLLDB
+			],
+			"settings": {
+				"window.title": "${localWorkspaceFolderBasename}${separator}${dirty}${activeEditorShort}${separator}${rootName}${separator}${profileName}${separator}${appName}",
+				"dprint.path": "/home/cuser/.local/share/mise/shims/dprint",
+				"remote.autoForwardPorts": true,
+				"remote.autoForwardPortsSource": "process"
+			}
+		}
+	},
+	"portsAttributes": {
+		"5080": {
+			"onAutoForward": "notify",
+			"label": "OpenObserve UI",
+			"requireLocalPort": false
+		}
+	},
+	"otherPortsAttributes": { "onAutoForward": "ignore" },
+	"containerEnv": {
+		"MISE_ENV": "devcontainer",
+		"MISE_GITHUB_TOKEN": "${localEnv:MISE_GITHUB_TOKEN}"
+	},
+	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
+	"remoteUser": "cuser",
+	"workspaceMount": "source=${localWorkspaceFolder},target=/app,type=bind,consistency=delegated",
+	"workspaceFolder": "/app"
+}

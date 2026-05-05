@@ -1,0 +1,57 @@
+{
+	// IntelliSense を使用して利用可能な属性を学べます。
+	// 既存の属性の説明をホバーして表示します。
+	// 詳細情報は次を確認してください: https://go.microsoft.com/fwlink/?linkid=830387
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"type": "lldb",
+			"request": "launch",
+			// graft:keep-start
+			"name": "Debug executable 'brust'",
+			// graft:keep-end
+			"cargo": {
+				"args": [
+					"build",
+					// graft:keep-start
+					"--bin=brust",
+					"--package=brust"
+					// graft:keep-end
+				],
+				"filter": {
+					// graft:keep-start
+					"name": "brust",
+					// graft:keep-end
+					"kind": "bin"
+				}
+			},
+			"args": [],
+			"cwd": "${workspaceFolder}"
+		},
+		{
+			"type": "lldb",
+			"request": "launch",
+			// graft:keep-start
+			"name": "Debug unit tests in executable 'brust'",
+			// graft:keep-end
+			"cargo": {
+				"args": [
+					"test",
+					"--no-run",
+					// graft:keep-start
+					"--bin=brust",
+					"--package=brust"
+					// graft:keep-end
+				],
+				"filter": {
+					// graft:keep-start
+					"name": "brust",
+					// graft:keep-end
+					"kind": "bin"
+				}
+			},
+			"args": [],
+			"cwd": "${workspaceFolder}"
+		}
+	]
+}

@@ -1,0 +1,32 @@
+# Clippy configuration
+
+# Complexity threshold
+cognitive-complexity-threshold = 25
+
+# Argument count threshold
+too-many-arguments-threshold = 7
+
+# Line count threshold
+too-many-lines-threshold = 100
+
+# Disallowed placeholder names
+disallowed-names = ["foo", "baz", "quux"]
+
+# Disallowed types
+disallowed-types = [
+	# "std::collections::BTreeMap",
+]
+
+# Disallowed methods
+disallowed-methods = [
+	# "std::env::set_var",
+]
+
+# Test code relaxations
+allow-unwrap-in-tests = true
+allow-print-in-tests = true
+allow-dbg-in-tests = true
+allow-expect-in-tests = true
+
+# MSRV (Minimum Supported Rust Version)
+# msrv = "1.70.0"

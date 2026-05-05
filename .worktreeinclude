@@ -1,0 +1,11 @@
+# .claude
+.claude/skills/lib-*/SKILL.md
+.claude/skills/tool-*/SKILL.md
+
+# MCP config
+.mcp.json
+
+# graft:keep-start
+# Project-specific dependencies are listed here.
+
+# graft:keep-end

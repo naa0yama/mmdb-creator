@@ -1,0 +1,33 @@
+---
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+      - tagpr
+
+  categories:
+    - title: Features 🎉
+      labels:
+        - enhancement
+        - feature
+    - title: Bug Fixes 🐌
+      labels:
+        - bug
+        - fix
+    - title: Documentation 🗒️
+      labels:
+        - documentation
+    - title: "Dependency Updates 📦"
+      labels:
+        - manager:cargo
+    - title: "Development Environment 🔧"
+      labels:
+        - manager:mise
+        - manager:github-actions
+        - manager:dockerfile
+        - manager:docker-compose
+        - manager:regex
+        - github-actions
+        - renovate-config
+    - title: Other Changes
+      labels: ["*"]
