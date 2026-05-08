@@ -3,32 +3,26 @@
 use anyhow::Result;
 use mmdb_core::config::Config;
 
-/// Run config validation and optionally emit an `--init-sheets` TOML scaffold.
+/// Collect all validation errors from `config`.
 ///
-/// # Errors
+/// Checks:
+/// - `whois.server` is not empty
+/// - each `sheets[n].filename` exists on disk
+/// - each `sheets[n].header_row >= 1`
+/// - column names within each sheet are unique
 ///
-/// Returns an error if the config fails validation (missing files, bad `header_row`,
-/// duplicate column names, or empty whois server).
-// NOTEST(io): checks file existence on disk and writes to stdout — depends on filesystem
-#[cfg_attr(coverage_nightly, coverage(off))]
-#[allow(clippy::print_stdout)]
-pub fn run(config: &Config, init_sheets: bool) -> Result<()> {
-    // -------------------------------------------------------------------------
-    // Part A — Config validation (always runs)
-    // -------------------------------------------------------------------------
-    let mut errors: Vec<String> = Vec::new();
+/// Returns an empty `Vec` when the config is valid.
+fn collect_config_errors(config: &Config) -> Vec<String> {
+    let mut errors = Vec::new();
 
-    // Check [whois] section.
     if let Some(whois) = &config.whois
         && whois.server.trim().is_empty()
     {
         errors.push("whois.server is empty".to_owned());
     }
 
-    // Check [[sheets]] entries.
     if let Some(sheets) = &config.sheets {
         for (idx, sheet) in sheets.iter().enumerate() {
-            // filename exists on disk
             if !sheet.filename.exists() {
                 errors.push(format!(
                     "sheets[{idx}].filename '{}' does not exist",
@@ -36,12 +30,10 @@ pub fn run(config: &Config, init_sheets: bool) -> Result<()> {
                 ));
             }
 
-            // header_row >= 1
             if sheet.header_row < 1 {
                 errors.push(format!("sheets[{idx}].header_row must be >= 1"));
             }
 
-            // columns names are unique within the sheet
             let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
             for col in &sheet.columns {
                 if !seen.insert(col.name.as_str()) {
@@ -54,6 +46,21 @@ pub fn run(config: &Config, init_sheets: bool) -> Result<()> {
         }
     }
 
+    errors
+}
+
+/// Run config validation and optionally emit an `--init-sheets` TOML scaffold.
+///
+/// # Errors
+///
+/// Returns an error if the config fails validation (missing files, bad `header_row`,
+/// duplicate column names, or empty whois server).
+// NOTEST(io): writes validation results to stdout — depends on terminal/stdout
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[allow(clippy::print_stdout)]
+pub fn run(config: &Config, init_sheets: bool) -> Result<()> {
+    let errors = collect_config_errors(config);
+
     if !errors.is_empty() {
         println!("Config validation failed:");
         for e in &errors {
@@ -65,9 +72,6 @@ pub fn run(config: &Config, init_sheets: bool) -> Result<()> {
     tracing::info!("config validation passed");
     println!("✓ config is valid");
 
-    // -------------------------------------------------------------------------
-    // Part B — --init-sheets output (only when init_sheets == true)
-    // -------------------------------------------------------------------------
     if init_sheets {
         print_init_sheets(config);
     }
@@ -106,11 +110,9 @@ fn print_init_sheets(config: &Config) {
             }
         };
 
-        // Build available sheet names and excludes for the header comment.
         let available: Vec<String> = sheet_infos.iter().map(|s| s.name.clone()).collect();
         let excludes = &sheet_config.excludes_sheets;
 
-        // Format as TOML arrays.
         let available_toml = format_toml_string_array(&available);
         let excludes_toml = format_toml_string_array(excludes);
 
@@ -127,7 +129,6 @@ fn print_init_sheets(config: &Config) {
         println!("header_row = {}", sheet_config.header_row);
         println!("excludes_sheets = {excludes_toml}");
 
-        // Deduplicate columns across sheets by sheet_name (header text).
         let mut seen_headers: std::collections::HashSet<String> = std::collections::HashSet::new();
 
         for sheet_info in &sheet_infos {
@@ -136,7 +137,6 @@ fn print_init_sheets(config: &Config) {
 
             for header in &sheet_info.headers {
                 if !seen_headers.insert(header.clone()) {
-                    // Deduplicated — already emitted for a previous sheet.
                     continue;
                 }
                 let name = to_snake_case(header);
@@ -186,7 +186,183 @@ fn format_toml_string_array(items: &[String]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{format_toml_string_array, to_snake_case};
+    use std::path::PathBuf;
+
+    use mmdb_core::config::{ColumnMapping, ColumnType, Config, SheetConfig, WhoisConfig};
+
+    use super::{collect_config_errors, format_toml_string_array, to_snake_case};
+
+    // ── helpers ──────────────────────────────────────────────────────────────
+
+    fn base_config() -> Config {
+        Config {
+            whois: None,
+            sheets: None,
+            scan: None,
+        }
+    }
+
+    fn whois_config(server: &str) -> WhoisConfig {
+        WhoisConfig {
+            server: server.to_owned(),
+            timeout_sec: 10,
+            asn: vec![],
+            rate_limit_ms: 2000,
+            max_retries: 3,
+            initial_backoff_ms: 1000,
+            ripe_stat_rate_limit_ms: 1000,
+            cache_dir: String::from("data/cache"),
+            cache_ttl_secs: 7200,
+            http_max_retries: 3,
+            http_retry_delay_secs: 2,
+        }
+    }
+
+    fn sheet(filename: impl Into<PathBuf>, header_row: u32) -> SheetConfig {
+        SheetConfig {
+            filename: filename.into(),
+            header_row,
+            excludes_sheets: vec![],
+            columns: vec![],
+        }
+    }
+
+    fn col(name: &str) -> ColumnMapping {
+        ColumnMapping {
+            name: name.to_owned(),
+            sheet_name: name.to_owned(),
+            col_type: ColumnType::String,
+        }
+    }
+
+    // ── collect_config_errors ─────────────────────────────────────────────────
+
+    #[test]
+    fn empty_config_has_no_errors() {
+        assert!(collect_config_errors(&base_config()).is_empty());
+    }
+
+    #[test]
+    fn nonempty_whois_server_is_valid() {
+        let cfg = Config {
+            whois: Some(whois_config("whois.example.com")),
+            ..base_config()
+        };
+        assert!(collect_config_errors(&cfg).is_empty());
+    }
+
+    #[test]
+    fn empty_whois_server_is_an_error() {
+        let cfg = Config {
+            whois: Some(whois_config("")),
+            ..base_config()
+        };
+        let errors = collect_config_errors(&cfg);
+        assert_eq!(errors, ["whois.server is empty"]);
+    }
+
+    #[test]
+    fn whitespace_only_whois_server_is_an_error() {
+        let cfg = Config {
+            whois: Some(whois_config("   ")),
+            ..base_config()
+        };
+        let errors = collect_config_errors(&cfg);
+        assert_eq!(errors, ["whois.server is empty"]);
+    }
+
+    #[test]
+    fn missing_sheet_file_is_an_error() {
+        let cfg = Config {
+            sheets: Some(vec![sheet("/nonexistent/mmdb-test-file.xlsx", 1)]),
+            ..base_config()
+        };
+        let errors = collect_config_errors(&cfg);
+        assert!(
+            errors.iter().any(|e| e.contains("does not exist")),
+            "expected 'does not exist' in {errors:?}"
+        );
+    }
+
+    #[test]
+    fn existing_sheet_file_passes() {
+        // "." always exists; use it as a stand-in for a real xlsx path.
+        let cfg = Config {
+            sheets: Some(vec![sheet(".", 1)]),
+            ..base_config()
+        };
+        let errors = collect_config_errors(&cfg);
+        assert!(
+            !errors.iter().any(|e| e.contains("does not exist")),
+            "unexpected file error in {errors:?}"
+        );
+    }
+
+    #[test]
+    fn header_row_zero_is_an_error() {
+        let cfg = Config {
+            sheets: Some(vec![sheet(".", 0)]),
+            ..base_config()
+        };
+        let errors = collect_config_errors(&cfg);
+        assert!(
+            errors.iter().any(|e| e.contains("header_row must be >= 1")),
+            "expected header_row error in {errors:?}"
+        );
+    }
+
+    #[test]
+    fn header_row_one_is_valid() {
+        let cfg = Config {
+            sheets: Some(vec![sheet(".", 1)]),
+            ..base_config()
+        };
+        assert!(collect_config_errors(&cfg).is_empty());
+    }
+
+    #[test]
+    fn duplicate_column_names_are_an_error() {
+        let cfg = Config {
+            sheets: Some(vec![SheetConfig {
+                columns: vec![col("region"), col("region")],
+                ..sheet(".", 1)
+            }]),
+            ..base_config()
+        };
+        let errors = collect_config_errors(&cfg);
+        assert!(
+            errors.iter().any(|e| e.contains("duplicate name 'region'")),
+            "expected duplicate-name error in {errors:?}"
+        );
+    }
+
+    #[test]
+    fn unique_column_names_are_valid() {
+        let cfg = Config {
+            sheets: Some(vec![SheetConfig {
+                columns: vec![col("region"), col("site")],
+                ..sheet(".", 1)
+            }]),
+            ..base_config()
+        };
+        assert!(collect_config_errors(&cfg).is_empty());
+    }
+
+    #[test]
+    fn multiple_errors_are_all_reported() {
+        let cfg = Config {
+            whois: Some(whois_config("")),
+            sheets: Some(vec![SheetConfig {
+                columns: vec![col("x"), col("x")],
+                ..sheet(".", 0)
+            }]),
+            ..base_config()
+        };
+        let errors = collect_config_errors(&cfg);
+        assert_eq!(errors.len(), 3, "expected 3 errors, got {errors:?}");
+    }
+
+    // ── to_snake_case ─────────────────────────────────────────────────────────
 
     #[test]
     fn snake_case_simple() {
