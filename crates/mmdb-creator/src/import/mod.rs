@@ -205,6 +205,9 @@ async fn write_whois_jsonl(records: &[WhoisRecord]) -> Result<()> {
             .with_context(|| format!("failed to create directory {}", parent.display()))?;
     }
 
+    crate::backup::rotate_backup(path, 5)
+        .await
+        .with_context(|| format!("failed to rotate backup for {}", path.display()))?;
     let mut file = tokio::fs::File::create(path)
         .await
         .with_context(|| format!("failed to create {}", path.display()))?;

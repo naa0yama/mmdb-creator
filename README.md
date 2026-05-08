@@ -188,10 +188,15 @@ mise run pre-commit       # clean:sweep + fmt:check + clippy:strict + ast-grep +
 │   │   ├── src/
 │   │   │   ├── main.rs         # アプリケーションのエントリーポイント
 │   │   │   ├── cli.rs          # CLI 引数定義 (clap)
+│   │   │   ├── backup.rs       # ローテーティングバックアップユーティリティ
 │   │   │   ├── cache.rs        # キャッシュ管理
+│   │   │   ├── libs.rs         # 共有ライブラリ再エクスポート
 │   │   │   ├── validate.rs     # 検証サブコマンド
+│   │   │   ├── enrich/         # エンリッチサブコマンド
+│   │   │   ├── export/         # エクスポートサブコマンド
+│   │   │   ├── import/         # インポートサブコマンド
 │   │   │   ├── scan/           # スキャンサブコマンド
-│   │   │   └── export/         # エクスポートサブコマンド
+│   │   │   └── telemetry/      # OpenTelemetry 初期化
 │   │   ├── tests/
 │   │   │   └── integration_test.rs  # 統合テスト
 │   │   ├── build.rs            # ビルドスクリプト

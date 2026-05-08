@@ -117,6 +117,9 @@ pub async fn run(config: &Config) -> Result<()> {
     // Atomic write: write to a temp file then rename.
     let tmp_path = out_path.with_extension("jsonl.tmp");
     write_jsonl(&tmp_path, &records).await?;
+    crate::backup::rotate_backup(out_path, 5)
+        .await
+        .with_context(|| format!("failed to rotate backup for {}", out_path.display()))?;
     tokio::fs::rename(&tmp_path, out_path)
         .await
         .context("failed to atomically write scanned.jsonl")?;
