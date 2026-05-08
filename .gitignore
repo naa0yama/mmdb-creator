@@ -54,4 +54,13 @@ src-tauri/gen/
 
 # graft:keep-end
 
+# Data files (user-specific runtime data, not tracked)
+config.toml
+data/input/
+data/cache/
+data/*.jsonl
+
+# Keep sample xlsx tracked
+!data/exsample/
+
 # Under the unknown

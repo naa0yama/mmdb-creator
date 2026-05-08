@@ -1,0 +1,50 @@
+# mmdb-creator configuration
+
+[whois]
+# Whois server hostname (TCP port 43)
+server = "whois.apnic.net"
+
+# ASN numbers to query when --asn is not given on the CLI
+# asn = [64496, 64497]
+
+# Directory for REST API response caches (RIPE Stat per-ASN + bgp.tools table)
+cache_dir = "data/cache"
+
+# Cache TTL in seconds (default: 7200 = 2 hours)
+# cache_ttl_secs = 7200
+
+# TCP 43 query delay in milliseconds between consecutive queries (default: 2000)
+# rate_limit_ms = 2000
+
+# HTTP retry settings (mirrors curl --retry / --retry-delay)
+# http_max_retries = 3
+# http_retry_delay_secs = 2
+
+# [[sheets]]
+# filename = "sheets_A.xlsx"
+# header_row = 1
+# excludes_sheets = ["Power"]
+#
+# [[sheets.columns]]
+# name = "region"
+# sheet_name = "Region"
+# type = "string"        # string | integer | addresses | bool
+
+# [scan]
+# scamper global packets-per-second limit (default: 50)
+# pps = 50
+#
+# Probes per hop sent by scamper -q (default: 3)
+# probes = 3
+#
+# Maximum concurrent targets submitted to scamper (default: 100)
+# window = 100
+#
+# Flush scan.jsonl writer buffer after this many records (default: 100)
+# flush_count = 100
+#
+# Flush scan.jsonl writer buffer after this many seconds (default: 5)
+# flush_interval_sec = 5
+#
+# DNS nameservers for PTR reverse lookup (empty = OS default)
+# nameservers = ["8.8.8.8", "1.1.1.1"]

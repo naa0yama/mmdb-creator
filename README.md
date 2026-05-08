@@ -179,19 +179,26 @@ mise run pre-commit       # clean:sweep + fmt:check + clippy:strict + ast-grep +
 │   └── settings.json           # ワークスペース設定
 ├── ast-rules/                  # ast-grep プロジェクトルール
 ├── crates/                     # ワークスペースクレート
-│   └── brust/                  # CLI バイナリクレート
-│       ├── src/
-│       │   ├── main.rs         # アプリケーションのエントリーポイント
-│       │   ├── libs.rs         # モジュール定義
-│       │   ├── metrics.rs      # OTel メトリクス instruments
-│       │   └── libs/
-│       │       ├── count.rs    # イテレーションカウンターモジュール
-│       │       ├── hello.rs    # Hello モジュール
-│       │       └── http.rs     # HTTP クライアント (OTel メトリクス付き)
-│       ├── tests/
-│       │   └── integration_test.rs  # 統合テスト
-│       ├── build.rs            # ビルドスクリプト
-│       └── Cargo.toml          # クレート設定
+│   ├── mmdb-core/              # 共有型・設定・外部データ (lib)
+│   │   └── src/
+│   │       ├── config.rs       # 設定読み込み
+│   │       ├── external.rs     # 外部データ型
+│   │       └── types.rs        # 共有型定義
+│   ├── mmdb-creator/           # CLI バイナリクレート (メインエントリーポイント)
+│   │   ├── src/
+│   │   │   ├── main.rs         # アプリケーションのエントリーポイント
+│   │   │   ├── cli.rs          # CLI 引数定義 (clap)
+│   │   │   ├── cache.rs        # キャッシュ管理
+│   │   │   ├── validate.rs     # 検証サブコマンド
+│   │   │   ├── scan/           # スキャンサブコマンド
+│   │   │   └── export/         # エクスポートサブコマンド
+│   │   ├── tests/
+│   │   │   └── integration_test.rs  # 統合テスト
+│   │   ├── build.rs            # ビルドスクリプト
+│   │   └── Cargo.toml          # クレート設定
+│   ├── mmdb-dns/               # DNS 逆引き・AS 情報取得 (lib)
+│   ├── mmdb-whois/             # WHOIS / RPSL プレフィックス照会 (lib)
+│   └── mmdb-xlsx/              # Excel (xlsx) 読み込み・アドレス解析 (lib)
 ├── docs/                       # ドキュメント
 ├── .editorconfig               # エディター設定
 ├── .gitignore                  # Git除外設定

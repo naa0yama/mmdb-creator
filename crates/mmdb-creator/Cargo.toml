@@ -2,15 +2,15 @@
 # - Package
 # -
 [package]
-name = "brust"
+name = "mmdb-creator"
 version.workspace = true
 categories = ["command-line-utilities"]
 edition.workspace = true
-keywords = ["cli", "tool"]
+keywords = ["cli", "mmdb", "network", "whois"]
 license.workspace = true
 publish.workspace = true
 repository.workspace = true
-description = "A CLI tool built following project rules standards"
+description = "CLI tool for creating MaxMind MMDB databases from whois and Excel data"
 
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.tar.gz"
@@ -47,18 +47,25 @@ process-metrics = [
 # - Dependencies
 # -
 [dependencies]
+# Internal crates
+mmdb-core.workspace = true
+mmdb-dns.workspace = true
+mmdb-whois.workspace = true
+mmdb-xlsx.workspace = true
+
 # Core
 anyhow.workspace = true
 clap.workspace = true
+tokio.workspace = true
 
 # Data
+calamine.workspace = true
+chrono.workspace = true
+ipnet.workspace = true
 reqwest.workspace = true
 rustls.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-
-# Random
-rand.workspace = true
 
 # Logging
 tracing.workspace = true
