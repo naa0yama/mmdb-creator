@@ -1,4 +1,5 @@
 //! mmdb-creator — CLI tool for creating `MaxMind` `MMDB` databases.
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 
 mod cache;
 mod cli;
@@ -26,6 +27,8 @@ use crate::telemetry::metrics::Meters;
 
 const APP_VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (rev:", env!("GIT_HASH"), ")",);
 
+// NOTEST(io): CLI entry point — stdin/stdout I/O and config loading
+#[cfg_attr(coverage_nightly, coverage(off))]
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Install TLS crypto provider for reqwest (required by rustls-no-provider feature).
@@ -145,7 +148,9 @@ type OtelProviders = (
 /// Build an `OTel` `Resource` for this process.
 ///
 /// `OTEL_SERVICE_NAME` env var overrides the compiled-in package name.
+// NOTEST(cfg): OTel resource construction — only meaningful with live OTLP endpoint
 #[cfg(feature = "otel")]
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn build_resource() -> opentelemetry_sdk::Resource {
     let service_name =
         std::env::var("OTEL_SERVICE_NAME").unwrap_or_else(|_| String::from(env!("CARGO_PKG_NAME")));
@@ -171,6 +176,7 @@ fn build_resource() -> opentelemetry_sdk::Resource {
 // NOTEST(cfg): OTel init requires OTLP endpoint — covered by integration trace tests
 /// Initialize `OTel` tracing, logging, and metrics providers.
 #[cfg(feature = "otel")]
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn init_otel() -> OtelProviders {
     let env_filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("info,opentelemetry=off"));
@@ -254,6 +260,7 @@ fn init_otel() -> OtelProviders {
 // NOTEST(cfg): OTel shutdown requires live providers — covered by integration trace tests
 /// Shut down `OTel` providers in reverse initialization order.
 #[cfg(feature = "otel")]
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn shutdown_otel((tracer_provider, meter_provider, logger_provider): OtelProviders) {
     if let Some(provider) = tracer_provider
         && let Err(e) = provider.shutdown()

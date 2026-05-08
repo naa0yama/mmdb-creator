@@ -1,4 +1,5 @@
 //! mmdb-whois: whois client library for mmdb-creator.
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 //!
 //! Resolves ASN or IP/CIDR inputs into [`WhoisData`] by:
 //!
@@ -28,6 +29,8 @@ use mmdb_core::{config::WhoisConfig, types::WhoisData};
 ///
 /// Returns an error if the RIPE Stat lookups fail. Individual TCP 43 query failures are
 /// returned as `Err` entries in the result vector rather than aborting the entire batch.
+// NOTEST(io): orchestrates RIPE Stat HTTP + TCP 43 whois — depends on live network
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub async fn query_asn(
     whois: &WhoisClient,
     prefix_client: &PrefixClient,

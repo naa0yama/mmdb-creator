@@ -14,6 +14,8 @@ use crate::types::DnsConfig;
 ///
 /// Returns a map of IP → first PTR hostname. IPs that fail resolution
 /// are omitted from the result (failure logged as `warn`).
+// NOTEST(io): DNS reverse lookups via DoH resolver — requires live DNS
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub async fn lookup(
     ips: &[IpAddr],
     resolver: &AsyncResolver,
@@ -77,6 +79,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "requires network access"]
+    #[cfg_attr(coverage_nightly, coverage(off))]
     async fn lookup_cloudflare_ptr() {
         use crate::resolver::build_resolver;
         use crate::types::DohServer;

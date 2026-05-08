@@ -40,6 +40,8 @@ type AsnMemo = Arc<RwLock<HashMap<u32, String>>>;
 /// Returns a map of each IP to its resolved [`CymruData`]. Individual lookup
 /// failures are logged as warnings and the IP is omitted from the result.
 /// Never returns an error — the returned map may be empty on complete failure.
+// NOTEST(io): DNS TXT queries via DoH resolver — requires live DNS
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub async fn lookup(
     ips: &[IpAddr],
     resolver: &AsyncResolver,
@@ -84,6 +86,8 @@ pub async fn lookup(
 }
 
 /// Process a single bucket of IPs serially and return a partial result map.
+// NOTEST(io): DNS TXT queries via resolver — depends on live DoH
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn process_bucket(
     bucket_ips: Vec<IpAddr>,
     resolver: &AsyncResolver,
@@ -479,5 +483,91 @@ mod tests {
         let ip: IpAddr = "192.0.2.1".parse().unwrap();
         let found = find_in_cache(ip, &cache);
         assert!(found.is_none());
+    }
+
+    // ── ip_to_host_net ────────────────────────────────────────────────────────
+
+    #[test]
+    fn ip_to_host_net_ipv4_slash32() {
+        let ip: IpAddr = "198.51.100.1".parse().unwrap();
+        let net = ip_to_host_net(ip);
+        assert_eq!(net.prefix_len(), 32);
+        assert_eq!(net.addr(), ip);
+    }
+
+    #[test]
+    fn ip_to_host_net_ipv6_slash128() {
+        let ip: IpAddr = "2001:db8::1".parse().unwrap();
+        let net = ip_to_host_net(ip);
+        assert_eq!(net.prefix_len(), 128);
+        assert_eq!(net.addr(), ip);
+    }
+
+    // ── ip_bucket ─────────────────────────────────────────────────────────────
+
+    #[test]
+    fn ip_bucket_ipv4_slash26() {
+        let ip: IpAddr = "198.51.100.57".parse().unwrap();
+        let bucket = ip_bucket(ip);
+        assert_eq!(bucket.prefix_len(), 26);
+        // 198.51.100.57 is in the .0/26 bucket (0..63).
+        assert_eq!(bucket.addr().to_string(), "198.51.100.0");
+    }
+
+    #[test]
+    fn ip_bucket_ipv4_second_slash26() {
+        // 198.51.100.64 is the start of the .64/26 bucket.
+        let ip: IpAddr = "198.51.100.64".parse().unwrap();
+        let bucket = ip_bucket(ip);
+        assert_eq!(bucket.prefix_len(), 26);
+        assert_eq!(bucket.addr().to_string(), "198.51.100.64");
+    }
+
+    #[test]
+    fn ip_bucket_ipv6_slash66() {
+        let ip: IpAddr = "2001:db8::1".parse().unwrap();
+        let bucket = ip_bucket(ip);
+        assert_eq!(bucket.prefix_len(), 66);
+    }
+
+    // ── group_into_buckets ────────────────────────────────────────────────────
+
+    #[test]
+    fn group_into_buckets_empty() {
+        let buckets = group_into_buckets(&[]);
+        assert!(buckets.is_empty());
+    }
+
+    #[test]
+    fn group_into_buckets_same_bucket() {
+        let ips: Vec<IpAddr> = vec![
+            "198.51.100.1".parse().unwrap(),
+            "198.51.100.2".parse().unwrap(),
+        ];
+        let buckets = group_into_buckets(&ips);
+        assert_eq!(buckets.len(), 1);
+        assert_eq!(buckets.first().map(|(_, v)| v.len()), Some(2));
+    }
+
+    #[test]
+    fn group_into_buckets_different_buckets() {
+        let ips: Vec<IpAddr> = vec![
+            "198.51.100.1".parse().unwrap(),  // .0/26
+            "198.51.100.65".parse().unwrap(), // .64/26
+        ];
+        let buckets = group_into_buckets(&ips);
+        assert_eq!(buckets.len(), 2);
+        if let [(k0, _), (k1, _)] = buckets.as_slice() {
+            assert!(k0 < k1);
+        } else {
+            panic!("expected exactly 2 buckets");
+        }
+    }
+
+    #[test]
+    fn parse_asname_txt_empty_name_returns_none() {
+        let txt = "64496 | JP | apnic | 2001-01-01 | ";
+        let result = parse_asname_txt(txt);
+        assert!(result.is_none());
     }
 }

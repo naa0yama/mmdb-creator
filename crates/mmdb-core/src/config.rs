@@ -23,6 +23,8 @@ impl Config {
     /// # Errors
     ///
     /// Returns an error if the file cannot be read or is not valid TOML.
+    // NOTEST(io): reads TOML file from filesystem
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub fn load(path: &Path) -> Result<Self> {
         let text = std::fs::read_to_string(path)
             .with_context(|| format!("failed to read config {}", path.display()))?;
@@ -74,38 +76,56 @@ pub struct WhoisConfig {
     pub http_retry_delay_secs: u64,
 }
 
+// NOTEST(cfg): serde default callback — trivial constant, only invoked during deserialization
+#[cfg_attr(coverage_nightly, coverage(off))]
 const fn default_timeout() -> u64 {
     10
 }
 
+// NOTEST(cfg): serde default callback — trivial constant
+#[cfg_attr(coverage_nightly, coverage(off))]
 const fn default_rate_limit_ms() -> u64 {
     2000
 }
 
+// NOTEST(cfg): serde default callback — trivial constant
+#[cfg_attr(coverage_nightly, coverage(off))]
 const fn default_max_retries() -> u32 {
     3
 }
 
+// NOTEST(cfg): serde default callback — trivial constant
+#[cfg_attr(coverage_nightly, coverage(off))]
 const fn default_initial_backoff_ms() -> u64 {
     1000
 }
 
+// NOTEST(cfg): serde default callback — trivial constant
+#[cfg_attr(coverage_nightly, coverage(off))]
 const fn default_ripe_stat_rate_limit_ms() -> u64 {
     1000
 }
 
+// NOTEST(cfg): serde default callback — returns constant string
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn default_cache_dir() -> String {
     String::from("data/cache/import")
 }
 
+// NOTEST(cfg): serde default callback — trivial constant
+#[cfg_attr(coverage_nightly, coverage(off))]
 const fn default_cache_ttl_secs() -> u64 {
     7200
 }
 
+// NOTEST(cfg): serde default callback — trivial constant
+#[cfg_attr(coverage_nightly, coverage(off))]
 const fn default_http_max_retries() -> u32 {
     3
 }
 
+// NOTEST(cfg): serde default callback — trivial constant
+#[cfg_attr(coverage_nightly, coverage(off))]
 const fn default_http_retry_delay_secs() -> u64 {
     2
 }
@@ -138,6 +158,8 @@ pub struct ScanConfig {
 }
 
 impl Default for ScanConfig {
+    // NOTEST(cfg): serde default constructor — only exercised via TOML deserialization
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn default() -> Self {
         Self {
             pps: default_scan_pps(),
@@ -151,30 +173,44 @@ impl Default for ScanConfig {
     }
 }
 
+// NOTEST(cfg): serde default callback — trivial constant
+#[cfg_attr(coverage_nightly, coverage(off))]
 const fn default_scan_pps() -> u32 {
     50
 }
 
+// NOTEST(cfg): serde default callback — trivial constant
+#[cfg_attr(coverage_nightly, coverage(off))]
 const fn default_scan_probes() -> u32 {
     3
 }
 
+// NOTEST(cfg): serde default callback — trivial constant
+#[cfg_attr(coverage_nightly, coverage(off))]
 const fn default_scan_window() -> usize {
     200
 }
 
+// NOTEST(cfg): serde default callback — trivial constant
+#[cfg_attr(coverage_nightly, coverage(off))]
 const fn default_scan_flush_count() -> usize {
     100
 }
 
+// NOTEST(cfg): serde default callback — trivial constant
+#[cfg_attr(coverage_nightly, coverage(off))]
 const fn default_scan_flush_interval_sec() -> u64 {
     5
 }
 
+// NOTEST(cfg): serde default callback — trivial constant
+#[cfg_attr(coverage_nightly, coverage(off))]
 const fn default_dns_concurrency() -> usize {
     10
 }
 
+// NOTEST(cfg): serde default callback — returns constant string
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn default_doh_server() -> String {
     String::from("cloudflare")
 }
@@ -196,6 +232,8 @@ pub struct SheetConfig {
     pub columns: Vec<ColumnMapping>,
 }
 
+// NOTEST(cfg): serde default callback — trivial constant
+#[cfg_attr(coverage_nightly, coverage(off))]
 const fn default_header_row() -> u32 {
     1
 }

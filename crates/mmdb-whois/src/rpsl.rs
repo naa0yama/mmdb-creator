@@ -361,4 +361,125 @@ last-modified:  2025-01-15T00:00:00Z
         let result = parse_aut_num("as-name: EXAMPLE\n");
         assert!(result.is_err());
     }
+
+    // ── inetnum_to_net ────────────────────────────────────────────────────────
+
+    #[test]
+    fn inetnum_to_net_cidr_passthrough() {
+        // Already CIDR notation — fast path.
+        let net = inetnum_to_net("198.51.100.0/24").unwrap();
+        assert_eq!(net.prefix_len(), 24);
+    }
+
+    #[test]
+    fn inetnum_to_net_ipv4_range_aligned() {
+        // 198.51.100.0 - 198.51.100.255 → /24
+        let net = inetnum_to_net("198.51.100.0 - 198.51.100.255").unwrap();
+        assert_eq!(net.prefix_len(), 24);
+        assert_eq!(net.addr().to_string(), "198.51.100.0");
+    }
+
+    #[test]
+    fn inetnum_to_net_ipv4_range_slash25() {
+        // 198.51.100.0 - 198.51.100.127 → /25
+        let net = inetnum_to_net("198.51.100.0 - 198.51.100.127").unwrap();
+        assert_eq!(net.prefix_len(), 25);
+    }
+
+    #[test]
+    fn inetnum_to_net_ipv4_range_non_aligned_returns_none() {
+        // Non-aligned range (size is not power-of-two start).
+        let result = inetnum_to_net("198.51.100.1 - 198.51.100.255");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn inetnum_to_net_ipv6_cidr() {
+        let net = inetnum_to_net("2001:db8::/32").unwrap();
+        assert_eq!(net.prefix_len(), 32);
+    }
+
+    #[test]
+    fn inetnum_to_net_ipv6_range_aligned() {
+        // 2001:db8:: - 2001:db8:ffff:ffff:ffff:ffff:ffff:ffff → /32
+        let net = inetnum_to_net("2001:db8:: - 2001:db8:ffff:ffff:ffff:ffff:ffff:ffff").unwrap();
+        assert_eq!(net.prefix_len(), 32);
+    }
+
+    #[test]
+    fn inetnum_to_net_missing_dash_returns_none() {
+        // No " - " separator and not CIDR → None.
+        let result = inetnum_to_net("198.51.100.0");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn inetnum_to_net_mixed_family_returns_none() {
+        // IPv4 start and IPv6 end — returns None on mixed family.
+        let result = inetnum_to_net("198.51.100.0 - 2001:db8::1");
+        assert!(result.is_none());
+    }
+
+    // ── parse_rpsl_all ────────────────────────────────────────────────────────
+
+    #[test]
+    fn parse_rpsl_all_two_objects() {
+        let input = "\
+inetnum: 198.51.100.0 - 198.51.100.127\n\
+netname: FIRST\n\
+\n\
+inetnum: 198.51.100.128 - 198.51.100.255\n\
+netname: SECOND\n";
+        let results = parse_rpsl_all(input);
+        assert_eq!(results.len(), 2);
+        assert_eq!(results.first().map(|r| r.netname.as_str()), Some("FIRST"));
+        assert_eq!(results.get(1).map(|r| r.netname.as_str()), Some("SECOND"));
+    }
+
+    #[test]
+    fn parse_rpsl_all_no_trailing_blank_line() {
+        // Response without trailing blank line — last object still parsed.
+        let input = "inetnum: 198.51.100.0 - 198.51.100.255\nnetname: ONLY";
+        let results = parse_rpsl_all(input);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results.first().map(|r| r.netname.as_str()), Some("ONLY"));
+    }
+
+    #[test]
+    fn parse_rpsl_all_skips_invalid_objects() {
+        // One valid inetnum block and one comment-only block.
+        let input = "\
+% comment\n\
+\n\
+inetnum: 198.51.100.0 - 198.51.100.255\n\
+netname: VALID\n";
+        let results = parse_rpsl_all(input);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results.first().map(|r| r.netname.as_str()), Some("VALID"));
+    }
+
+    #[test]
+    fn parse_rpsl_all_empty_input() {
+        let results = parse_rpsl_all("");
+        assert!(results.is_empty());
+    }
+
+    // ── parse_rpsl continuation lines ─────────────────────────────────────────
+
+    #[test]
+    fn parse_rpsl_continuation_extends_descr() {
+        // Use explicit \n and leading space to avoid Rust's line-continuation
+        // whitespace stripping (trailing \ on string literal strips next-line spaces).
+        let input = "inetnum: 198.51.100.0 - 198.51.100.255\nnetname: EXAMPLE\ndescr: Line one\n continued here\n";
+        let data = parse_rpsl(input).unwrap();
+        assert_eq!(data.descr.as_deref(), Some("Line one continued here"));
+    }
+
+    #[test]
+    fn parse_rpsl_continuation_tab_extends_descr() {
+        let input =
+            "inetnum: 198.51.100.0 - 198.51.100.255\nnetname: EXAMPLE\ndescr: First\n\tSecond\n";
+        let data = parse_rpsl(input).unwrap();
+        assert_eq!(data.descr.as_deref(), Some("First Second"));
+    }
 }

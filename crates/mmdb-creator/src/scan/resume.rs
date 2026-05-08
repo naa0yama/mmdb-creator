@@ -42,6 +42,8 @@ pub fn expand_cidrs(cidrs: &[IpNet]) -> Vec<(IpNet, IpAddr)> {
 /// # Errors
 ///
 /// Returns an error only if the file exists but cannot be opened.
+// NOTEST(io): reads scan JSONL file from filesystem
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub async fn load_completed(path: &Path) -> Result<HashSet<IpAddr>> {
     if !path.exists() {
         return Ok(HashSet::new());

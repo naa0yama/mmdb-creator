@@ -9,6 +9,8 @@ use mmdb_core::config::Config;
 ///
 /// Returns an error if the config fails validation (missing files, bad `header_row`,
 /// duplicate column names, or empty whois server).
+// NOTEST(io): checks file existence on disk and writes to stdout — depends on filesystem
+#[cfg_attr(coverage_nightly, coverage(off))]
 #[allow(clippy::print_stdout)]
 pub fn run(config: &Config, init_sheets: bool) -> Result<()> {
     // -------------------------------------------------------------------------
@@ -74,6 +76,8 @@ pub fn run(config: &Config, init_sheets: bool) -> Result<()> {
 }
 
 /// Emit a TOML scaffold for all `[[sheets]]` entries to stdout.
+// NOTEST(io): calls mmdb_xlsx::inspect_sheets (Excel file I/O) and writes to stdout
+#[cfg_attr(coverage_nightly, coverage(off))]
 #[allow(clippy::print_stdout)]
 fn print_init_sheets(config: &Config) {
     let sheets = match config.sheets.as_deref() {
@@ -182,7 +186,7 @@ fn format_toml_string_array(items: &[String]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::to_snake_case;
+    use super::{format_toml_string_array, to_snake_case};
 
     #[test]
     fn snake_case_simple() {
@@ -212,5 +216,24 @@ mod tests {
     #[test]
     fn snake_case_mixed_separators() {
         assert_eq!(to_snake_case("PE addresses"), "pe_addresses");
+    }
+
+    // ── format_toml_string_array ─────────────────────────────────────────────
+
+    #[test]
+    fn format_toml_array_empty() {
+        assert_eq!(format_toml_string_array(&[]), "[]");
+    }
+
+    #[test]
+    fn format_toml_array_single_item() {
+        let items = vec![String::from("Sheet1")];
+        assert_eq!(format_toml_string_array(&items), r#"["Sheet1"]"#);
+    }
+
+    #[test]
+    fn format_toml_array_multiple_items() {
+        let items = vec![String::from("Sheet1"), String::from("Sheet2")];
+        assert_eq!(format_toml_string_array(&items), r#"["Sheet1", "Sheet2"]"#);
     }
 }

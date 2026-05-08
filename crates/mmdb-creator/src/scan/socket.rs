@@ -30,6 +30,8 @@ pub enum ScamperMsg {
 /// # Errors
 ///
 /// Returns an error if I/O fails or if a `DATA N` length cannot be parsed.
+// NOTEST(io): reads from async socket stream — integration-tested only
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub async fn read_msg<R>(reader: &mut R) -> Result<Option<ScamperMsg>>
 where
     R: tokio::io::AsyncBufReadExt + tokio::io::AsyncReadExt + Unpin,
@@ -360,5 +362,65 @@ mod tests {
         let route = parse_trace(&sample_json("", "GAPLIMIT")).unwrap();
         assert_eq!(route.source, "10.0.0.1");
         assert_eq!(route.destination, "192.0.2.1");
+    }
+
+    #[test]
+    fn parse_trace_multiple_addrs_same_ttl_uses_majority() {
+        // Three probes at TTL 1: two for 10.1.0.1, one for 10.1.0.2 → majority is 10.1.0.1.
+        let hops = r#"
+            {"addr":"10.1.0.1","probe_ttl":1,"probe_id":1,"rtt":0.5,"icmp_type":11},
+            {"addr":"10.1.0.1","probe_ttl":1,"probe_id":2,"rtt":0.6,"icmp_type":11},
+            {"addr":"10.1.0.2","probe_ttl":1,"probe_id":3,"rtt":0.7,"icmp_type":11}
+        "#;
+        let route = parse_trace(&sample_json(hops, "COMPLETED")).unwrap();
+        assert_eq!(route.hops.len(), 1);
+        assert_eq!(route.hops[0].ip.as_deref(), Some("10.1.0.1"));
+    }
+
+    #[test]
+    fn parse_trace_hop_with_no_addr_produces_none_ip() {
+        // A hop entry with no addr field → ip should be None.
+        let hops = r#"
+            {"probe_ttl":1,"probe_id":1,"rtt":0.5,"icmp_type":11}
+        "#;
+        let route = parse_trace(&sample_json(hops, "GAPLIMIT")).unwrap();
+        assert_eq!(route.hops.len(), 1);
+        assert!(route.hops[0].ip.is_none());
+        assert!(route.hops[0].rtt_avg.is_some());
+    }
+
+    #[test]
+    fn parse_data_block_returns_none_on_empty() {
+        let result = parse_data_block(b"   ").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn parse_data_block_returns_meta_for_cycle_start() {
+        let json = br#"{"type":"cycle-start","list_name":"default","id":1,"hostname":"host","start_time":1000}"#;
+        let outcome = parse_data_block(json).unwrap().unwrap();
+        match outcome {
+            WartsOutcome::Meta(t) => assert_eq!(t, "cycle-start"),
+            WartsOutcome::Trace(_) => panic!("expected Meta"),
+        }
+    }
+
+    #[test]
+    fn parse_data_block_returns_trace() {
+        let json = sample_json(
+            r#"{"addr":"10.1.0.1","probe_ttl":1,"probe_id":1,"rtt":1.0,"icmp_type":11}"#,
+            "COMPLETED",
+        );
+        let outcome = parse_data_block(json.as_bytes()).unwrap().unwrap();
+        match outcome {
+            WartsOutcome::Trace(r) => assert_eq!(r.hops.len(), 1),
+            WartsOutcome::Meta(_) => panic!("expected Trace"),
+        }
+    }
+
+    #[test]
+    fn parse_data_block_invalid_utf8_errors() {
+        let result = parse_data_block(&[0xFF, 0xFE]);
+        assert!(result.is_err());
     }
 }

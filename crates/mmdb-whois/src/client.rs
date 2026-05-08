@@ -67,6 +67,8 @@ impl WhoisClient {
     ///
     /// Returns an error if all retry attempts are exhausted or a non-transient
     /// failure occurs.
+    // NOTEST(io): TCP 43 whois query with file cache — depends on network and filesystem
+    #[cfg_attr(coverage_nightly, coverage(off))]
     #[tracing::instrument(skip(self, autnum), fields(server = %self.server))]
     pub async fn query_cidr(
         &self,
@@ -170,6 +172,8 @@ impl WhoisClient {
     /// `-M` (more-specific) query finds sub-allocations within the queried prefix.
     /// The output `IpNet` is derived from each inetnum record, not from the input CIDR.
     /// Failed queries produce one `(input_cidr, Err(_))` entry.
+    // NOTEST(io): batch TCP 43 whois queries — depends on network and file cache
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn query_all(
         &self,
         cidrs: &[IpNet],
@@ -250,6 +254,8 @@ impl WhoisClient {
         results
     }
 
+    // NOTEST(io): file I/O — writes NDJSON cache to filesystem
+    #[cfg_attr(coverage_nightly, coverage(off))]
     async fn write_cache_ndjson(
         &self,
         cache_path: &std::path::Path,
@@ -288,11 +294,15 @@ impl WhoisClient {
         Ok(())
     }
 
+    // NOTEST(io): delegates to query_server which makes TCP 43 connections
+    #[cfg_attr(coverage_nightly, coverage(off))]
     async fn do_query(&self, cidr: &IpNet) -> Result<Vec<WhoisData>> {
         self.query_server(cidr, &self.server.clone(), 0).await
     }
 
     /// Query `server` and follow `refer:` referrals up to `MAX_REFERRAL_DEPTH`.
+    // NOTEST(io): TCP 43 queries with referral following — depends on live network
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn query_server<'a>(
         &'a self,
         cidr: &'a IpNet,
@@ -349,6 +359,8 @@ impl WhoisClient {
     /// When `more_specific` is `true`, adds `-M` to find sub-allocations contained
     /// within the queried CIDR.  Otherwise uses a bare query that returns the
     /// inetnum containing or exactly matching the CIDR.
+    // NOTEST(io): pure query formatter — but called only from query_server (I/O) so excluded
+    #[cfg_attr(coverage_nightly, coverage(off))]
     async fn tcp43_raw(&self, cidr: &IpNet, server: &str, more_specific: bool) -> Result<String> {
         let query = if more_specific {
             format!("-r -T inetnum,inet6num -M {cidr}\r\n")
@@ -359,6 +371,8 @@ impl WhoisClient {
     }
 
     /// Open a TCP 43 connection to `server`, send `query`, and return the full response.
+    // NOTEST(io): TCP connection — depends on live network
+    #[cfg_attr(coverage_nightly, coverage(off))]
     async fn tcp43_send(&self, query: &str, server: &str) -> Result<String> {
         let addr = format!("{server}:43");
 
@@ -425,6 +439,8 @@ fn embed_autnum(data: &mut WhoisData, autnum: &AutNumData) {
 }
 
 /// Returns true if `path` exists and was modified within `ttl`.
+// NOTEST(io): filesystem metadata check — depends on file system state
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn is_cache_fresh(path: &std::path::Path, ttl: Duration) -> bool {
     let Ok(meta) = tfs::metadata(path).await else {
         return false;
@@ -456,5 +472,67 @@ mod tests {
         assert!(!is_rate_limited_response(
             "inetnum: 192.0.2.0 - 192.0.2.255"
         ));
+    }
+
+    #[test]
+    fn is_rate_limited_detects_error_message() {
+        let e = anyhow::anyhow!("RATE_LIMITED: server returned rate limit response");
+        assert!(is_rate_limited(&e));
+        let ok = anyhow::anyhow!("connection refused");
+        assert!(!is_rate_limited(&ok));
+    }
+
+    #[test]
+    fn is_transient_detects_timeout_and_connection() {
+        assert!(is_transient(&anyhow::anyhow!(
+            "timeout connecting to whois"
+        )));
+        assert!(is_transient(&anyhow::anyhow!("connection refused")));
+        assert!(is_transient(&anyhow::anyhow!("connection reset by peer")));
+        assert!(is_transient(&anyhow::anyhow!("reset by peer")));
+        assert!(!is_transient(&anyhow::anyhow!("parse error")));
+    }
+
+    #[test]
+    fn cidr_to_filename_ipv4() {
+        let cidr: IpNet = "198.51.100.0/24".parse().unwrap();
+        assert_eq!(cidr_to_filename(&cidr), "ipv4-198.51.100.0_24");
+    }
+
+    #[test]
+    fn cidr_to_filename_ipv6() {
+        let cidr: IpNet = "2001:db8::/32".parse().unwrap();
+        assert_eq!(cidr_to_filename(&cidr), "ipv6-2001-db8--_32");
+    }
+
+    #[test]
+    fn cidr_to_legacy_filename_ipv4() {
+        let cidr: IpNet = "198.51.100.0/24".parse().unwrap();
+        assert_eq!(cidr_to_legacy_filename(&cidr), "198.51.100.0_24");
+    }
+
+    #[test]
+    fn embed_autnum_sets_as_fields() {
+        use mmdb_core::types::{AutNumData, WhoisData};
+        let autnum = AutNumData {
+            aut_num: String::from("AS64496"),
+            as_name: String::from("EXAMPLE-NET"),
+            descr: Some(String::from("Example Network, Inc.")),
+        };
+        let mut data = WhoisData {
+            inetnum: String::from("198.51.100.0/24"),
+            netname: String::from("TEST-NET"),
+            descr: None,
+            country: None,
+            source: None,
+            last_modified: None,
+            as_num: None,
+            as_name: None,
+            as_descr: None,
+        };
+        embed_autnum(&mut data, &autnum);
+        assert_eq!(data.as_num.as_deref(), Some("AS64496"));
+        assert_eq!(data.as_name.as_deref(), Some("EXAMPLE-NET"));
+        assert_eq!(data.as_descr.as_deref(), Some("Example Network, Inc."));
     }
 }

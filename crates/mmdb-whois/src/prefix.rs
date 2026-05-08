@@ -46,6 +46,8 @@ impl PrefixClient {
     /// # Errors
     ///
     /// Returns an error if the HTTP client cannot be built.
+    // NOTEST(io): builds a reqwest HTTP client — constructor only
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub fn from_config(cfg: &WhoisConfig) -> Result<Self> {
         let http = reqwest::Client::builder()
             .user_agent(USER_AGENT)
@@ -68,6 +70,8 @@ impl PrefixClient {
     /// # Errors
     ///
     /// Returns an error if the RIPE Stat request fails.
+    // NOTEST(io): live HTTP request to RIPE Stat — no mock HTTP layer available
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn announced_prefixes(&self, asn: u32) -> Result<Vec<IpNet>> {
         let prefixes = self.ripe_stat(asn).await?;
         if prefixes.is_empty() {
@@ -84,6 +88,8 @@ impl PrefixClient {
 
     // ---- RIPE Stat ----
 
+    // NOTEST(io): HTTP request + file cache — depends on RIPE Stat and local filesystem
+    #[cfg_attr(coverage_nightly, coverage(off))]
     async fn ripe_stat(&self, asn: u32) -> Result<Vec<IpNet>> {
         let cache_path = self
             .ripe_stat_cache_dir
@@ -160,6 +166,8 @@ impl PrefixClient {
     /// # Errors
     ///
     /// Returns an error if the HTTP request fails or required fields are absent.
+    // NOTEST(io): HTTP request + file cache — depends on RIPE Stat and local filesystem
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn query_autnum(&self, asn: u32) -> Result<AutNumData> {
         let cache_path = self
             .ripe_stat_cache_dir
@@ -257,6 +265,8 @@ impl PrefixClient {
     /// # Errors
     ///
     /// Returns an error if the HTTP request fails or the response cannot be parsed.
+    // NOTEST(io): HTTP request + file cache — depends on RIPE Stat and local filesystem
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn reverse_lookup_asn(&self, prefix: &IpNet) -> Result<Option<u32>> {
         let family = match prefix {
             IpNet::V4(_) => "ipv4",
@@ -337,6 +347,8 @@ impl PrefixClient {
     /// # Errors
     ///
     /// Returns an error if the HTTP request fails or the response cannot be parsed.
+    // NOTEST(io): HTTP request + file cache — depends on RIPE Stat and local filesystem
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn query_cidr_whois(
         &self,
         cidr: &IpNet,
@@ -409,6 +421,8 @@ impl PrefixClient {
     /// GET with retry (connection errors + 5xx), following redirects.
     ///
     /// Mirrors `curl -sfSL --retry 3 --retry-delay 2 --retry-connrefused`.
+    // NOTEST(io): live HTTP request — cannot mock without a mock HTTP layer
+    #[cfg_attr(coverage_nightly, coverage(off))]
     async fn get_with_retry(&self, url: &str) -> Result<reqwest::Response> {
         let mut delay = self.http_retry_delay;
 
@@ -521,11 +535,15 @@ fn parse_prefix_warn(s: &str) -> Option<IpNet> {
 }
 
 /// Returns true if the error is worth retrying (connection-level, not HTTP-level).
+// NOTEST(io): reqwest::Error cannot be constructed without live HTTP — only testable with mock
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn is_retryable_error(e: &reqwest::Error) -> bool {
     e.is_connect() || e.is_timeout() || e.is_request()
 }
 
 /// Returns true if `path` exists and was modified within `ttl`.
+// NOTEST(io): filesystem metadata check — depends on file system state
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn is_file_fresh(path: &Path, ttl: Duration) -> bool {
     let Ok(meta) = tfs::metadata(path).await else {
         return false;
@@ -539,6 +557,8 @@ async fn is_file_fresh(path: &Path, ttl: Duration) -> bool {
 }
 
 /// Read an NDJSON cache file and deserialize each non-empty line into `T`.
+// NOTEST(io): file I/O — reads from filesystem
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn read_ndjson_cache<T>(
     path: &Path,
     label: &(impl std::fmt::Display + Sync),
@@ -565,6 +585,8 @@ where
 ///
 /// Logs warnings on individual line failures rather than failing the whole write,
 /// because the cache is best-effort and a partial write is recoverable on next fetch.
+// NOTEST(io): file I/O — writes to filesystem
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn write_ndjson_cache<T>(path: &Path, label: &(impl std::fmt::Display + Sync), entries: &[T])
 where
     T: serde::Serialize + Sync,
@@ -645,4 +667,156 @@ struct RipeStatWhoisData {
 struct RipeStatWhoisKv {
     key: String,
     value: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use mmdb_core::types::AutNumData;
+
+    use super::*;
+
+    fn kv(key: &str, value: &str) -> RipeStatWhoisKv {
+        RipeStatWhoisKv {
+            key: key.to_owned(),
+            value: value.to_owned(),
+        }
+    }
+
+    // ── parse_ripestat_whois_record ───────────────────────────────────────────
+
+    #[test]
+    fn parse_record_extracts_inetnum_and_netname() {
+        let record = vec![
+            kv("inetnum", "198.51.100.0 - 198.51.100.255"),
+            kv("netname", "TEST-NET"),
+            kv("country", "JP"),
+            kv("source", "APNIC"),
+        ];
+        let result = parse_ripestat_whois_record(&record, None);
+        assert!(result.is_some());
+        let data = result.unwrap();
+        assert_eq!(data.inetnum, "198.51.100.0 - 198.51.100.255");
+        assert_eq!(data.netname, "TEST-NET");
+        assert_eq!(data.country.as_deref(), Some("JP"));
+        assert_eq!(data.source.as_deref(), Some("APNIC"));
+    }
+
+    #[test]
+    fn parse_record_inet6num_key() {
+        let record = vec![kv("inet6num", "2001:db8::/32"), kv("netname", "TEST-IPV6")];
+        let result = parse_ripestat_whois_record(&record, None);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().inetnum, "2001:db8::/32");
+    }
+
+    #[test]
+    fn parse_record_missing_netname_returns_none() {
+        let record = vec![kv("inetnum", "198.51.100.0/24")];
+        let result = parse_ripestat_whois_record(&record, None);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn parse_record_missing_inetnum_returns_none() {
+        let record = vec![kv("netname", "TEST-NET")];
+        let result = parse_ripestat_whois_record(&record, None);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn parse_record_embeds_autnum_when_provided() {
+        let record = vec![kv("inetnum", "198.51.100.0/24"), kv("netname", "TEST-NET")];
+        let autnum = AutNumData {
+            aut_num: String::from("AS64496"),
+            as_name: String::from("EXAMPLE-NET"),
+            descr: Some(String::from("Example Network, Inc.")),
+        };
+        let result = parse_ripestat_whois_record(&record, Some(&autnum));
+        assert!(result.is_some());
+        let data = result.unwrap();
+        assert_eq!(data.as_num.as_deref(), Some("AS64496"));
+        assert_eq!(data.as_name.as_deref(), Some("EXAMPLE-NET"));
+    }
+
+    #[test]
+    fn parse_record_ignores_unknown_keys() {
+        let record = vec![
+            kv("inetnum", "198.51.100.0/24"),
+            kv("netname", "TEST-NET"),
+            kv("unknown-key", "should-be-ignored"),
+        ];
+        let result = parse_ripestat_whois_record(&record, None);
+        assert!(result.is_some());
+    }
+
+    // ── apply_autnum ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn apply_autnum_copies_all_fields() {
+        use mmdb_core::types::WhoisData;
+        let autnum = AutNumData {
+            aut_num: String::from("AS64496"),
+            as_name: String::from("EXAMPLE-NET"),
+            descr: Some(String::from("Example Network")),
+        };
+        let mut data = WhoisData {
+            inetnum: String::from("198.51.100.0/24"),
+            netname: String::from("TEST-NET"),
+            descr: None,
+            country: None,
+            source: None,
+            last_modified: None,
+            as_num: None,
+            as_name: None,
+            as_descr: None,
+        };
+        apply_autnum(&mut data, &autnum);
+        assert_eq!(data.as_num.as_deref(), Some("AS64496"));
+        assert_eq!(data.as_name.as_deref(), Some("EXAMPLE-NET"));
+        assert_eq!(data.as_descr.as_deref(), Some("Example Network"));
+    }
+
+    #[test]
+    fn apply_autnum_none_descr() {
+        use mmdb_core::types::WhoisData;
+        let autnum = AutNumData {
+            aut_num: String::from("AS64496"),
+            as_name: String::from("EXAMPLE-NET"),
+            descr: None,
+        };
+        let mut data = WhoisData {
+            inetnum: String::from("198.51.100.0/24"),
+            netname: String::from("TEST-NET"),
+            descr: None,
+            country: None,
+            source: None,
+            last_modified: None,
+            as_num: None,
+            as_name: None,
+            as_descr: None,
+        };
+        apply_autnum(&mut data, &autnum);
+        assert!(data.as_descr.is_none());
+    }
+
+    // ── parse_prefix_warn ────────────────────────────────────────────────────
+
+    #[test]
+    fn parse_prefix_warn_valid_cidr() {
+        let result = parse_prefix_warn("198.51.100.0/24");
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().to_string(), "198.51.100.0/24");
+    }
+
+    #[test]
+    fn parse_prefix_warn_invalid_returns_none() {
+        let result = parse_prefix_warn("not-a-prefix");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn parse_prefix_warn_ipv6() {
+        let result = parse_prefix_warn("2001:db8::/32");
+        assert!(result.is_some());
+    }
 }

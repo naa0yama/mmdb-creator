@@ -20,6 +20,8 @@ use tokio::io::{AsyncWriteExt as _, BufReader};
 use crate::cache;
 
 /// Run the scan subcommand.
+// NOTEST(io): orchestrates scamper binary + file I/O — requires scamper on PATH
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub async fn run(config: &Config, force: bool, enrich_only: bool, ip: Option<&str>) -> Result<()> {
     if enrich_only {
         return enrich::run(config).await;
@@ -120,6 +122,8 @@ pub async fn run(config: &Config, force: bool, enrich_only: bool, ip: Option<&st
 }
 
 /// Run the trace loop using the scamper daemon control socket protocol.
+// NOTEST(io): Unix socket I/O loop talking to scamper daemon — requires scamper binary
+#[cfg_attr(coverage_nightly, coverage(off))]
 #[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
 async fn scan_loop(
     stream: &mut tokio::net::UnixStream,
@@ -294,6 +298,8 @@ fn fmt_hms(secs: u64) -> String {
 }
 
 /// Read `data/whois-cidr.jsonl` and return all CIDR prefixes.
+// NOTEST(io): reads whois JSONL file from filesystem
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn load_cidrs(path: &Path) -> Result<Vec<IpNet>> {
     let raw = tokio::fs::read_to_string(path)
         .await

@@ -55,7 +55,9 @@ impl Meters {
     /// Call exactly once after `opentelemetry::global::set_meter_provider` has
     /// been called. When the `process-metrics` feature is enabled (default),
     /// process metric observable callbacks are also registered here.
+    // NOTEST(cfg): requires a global MeterProvider to be initialized — covered only in main()
     #[must_use]
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub fn new() -> Self {
         let meter = opentelemetry::global::meter(env!("CARGO_PKG_NAME"));
 
@@ -114,12 +116,14 @@ impl Meters {
 
     /// Record export subcommand execution latency.
     #[allow(dead_code)]
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub fn record_export_duration(&self, duration_s: f64) {
         self.export_duration.record(duration_s, &[]);
     }
 
     /// Record scan subcommand execution latency.
     #[allow(dead_code)]
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub fn record_scan_duration(&self, duration_s: f64) {
         self.scan_duration.record(duration_s, &[]);
     }

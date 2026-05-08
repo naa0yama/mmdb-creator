@@ -41,6 +41,8 @@ pub fn build_resolver(server: &DohServer, timeout_sec: u64) -> Result<AsyncResol
 mod tests {
     use super::*;
 
+    // NOTEST(external): crossbeam-epoch Stacked Borrows false positive under Miri
+    #[cfg_attr(miri, ignore)]
     #[test]
     fn build_cloudflare_resolver_succeeds() {
         let result = build_resolver(&DohServer::Cloudflare, 5);
@@ -59,6 +61,8 @@ mod tests {
         assert!(result.is_err());
     }
 
+    // NOTEST(external): crossbeam-epoch Stacked Borrows false positive under Miri
+    #[cfg_attr(miri, ignore)]
     #[test]
     fn build_custom_resolver_valid_ip_succeeds() {
         let result = build_resolver(

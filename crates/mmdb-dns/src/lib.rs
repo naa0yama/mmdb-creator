@@ -1,4 +1,5 @@
 //! mmdb-dns: DNS enrichment library for mmdb-creator.
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 //!
 //! Resolves a list of IP addresses to ASN and PTR data using:
 //! - Team Cymru DNS TXT lookups via DNS-over-HTTPS (`DoH`)
@@ -27,6 +28,8 @@ use anyhow::{Context as _, Result};
 /// # Errors
 ///
 /// Returns an error if the `DoH` resolver cannot be constructed.
+// NOTEST(io): builds DoH resolver and makes DNS queries — requires live network
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub async fn enrich(
     ips: &[IpAddr],
     config: &DnsConfig,

@@ -26,6 +26,8 @@ use mmdb_core::{
 /// # Errors
 ///
 /// Returns an error if any I/O or JSON operation fails.
+// NOTEST(io): reads/writes JSONL files + DNS enrichment — depends on filesystem and DoH
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub async fn run(config: &Config) -> Result<()> {
     let whois_path = Path::new("data/whois-cidr.jsonl");
     let scan_path = Path::new("data/cache/scan/scanning.jsonl");
@@ -178,6 +180,8 @@ fn filter_and_renumber(record: &mut ScanRecord, prefixes: &[IpNet], _target_cidr
 }
 
 /// Load all network prefixes from `data/whois-cidr.jsonl`.
+// NOTEST(io): reads whois JSONL from filesystem
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn load_prefixes(path: &Path) -> Result<Vec<IpNet>> {
     if !path.exists() {
         return Ok(Vec::new());
@@ -199,6 +203,8 @@ async fn load_prefixes(path: &Path) -> Result<Vec<IpNet>> {
 }
 
 /// Write a list of [`ScanRecord`]s to a file as JSONL.
+// NOTEST(io): writes JSONL file to filesystem
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn write_jsonl(path: &Path, records: &[ScanRecord]) -> Result<()> {
     use tokio::io::AsyncWriteExt as _;
 

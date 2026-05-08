@@ -13,6 +13,8 @@ use mmdb_whois::{PrefixClient, clients_from_config, parse_asns, parse_prefixes, 
 use crate::cache;
 
 /// Run the import subcommand.
+// NOTEST(io): orchestrates whois + xlsx I/O — depends on live network and filesystem
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub async fn run(
     config: &Config,
     force: bool,
@@ -107,6 +109,8 @@ pub async fn run(
 }
 
 /// Query a single CIDR via RIPE Stat (reverse-lookup ASN → aut-num → cidr whois).
+// NOTEST(io): HTTP requests to RIPE Stat — depends on live network
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn collect_ip_records(
     prefix_client: &PrefixClient,
     prefix: IpNet,
@@ -189,6 +193,8 @@ fn log_results<T>(results: &[(ipnet::IpNet, Result<T>)]) {
 }
 
 /// Write whois records to `data/whois-cidr.jsonl`, overwriting any existing file.
+// NOTEST(io): writes JSONL file to filesystem
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn write_whois_jsonl(records: &[WhoisRecord]) -> Result<()> {
     use tokio::io::AsyncWriteExt as _;
 

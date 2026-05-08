@@ -31,6 +31,8 @@ impl ScamperDaemon {
     ///
     /// Returns an error if scamper cannot be spawned, the socket does not appear
     /// within the timeout, or the initial `attach` handshake fails.
+    // NOTEST(io): spawns external scamper process — requires scamper binary on PATH
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn spawn(pps: u32) -> Result<Self> {
         let socket_path = socket_path();
 
@@ -128,6 +130,8 @@ impl ScamperDaemon {
     }
 
     /// Borrow the connected Unix socket stream for sending trace commands.
+    // NOTEST(io): getter on ScamperDaemon which requires live scamper process
+    #[cfg_attr(coverage_nightly, coverage(off))]
     #[allow(clippy::missing_const_for_fn)]
     pub fn stream(&mut self) -> &mut UnixStream {
         &mut self.stream
@@ -138,6 +142,8 @@ impl ScamperDaemon {
     /// # Errors
     ///
     /// Returns an error if the process cannot be killed or the socket cannot be removed.
+    // NOTEST(io): kills child process and removes socket file — requires running scamper
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn shutdown(mut self) -> Result<()> {
         self.child
             .kill()
@@ -181,6 +187,7 @@ mod tests {
     // Integration test — requires `scamper` installed.
     #[tokio::test]
     #[ignore = "requires scamper binary installed on PATH"]
+    #[cfg_attr(coverage_nightly, coverage(off))]
     async fn spawn_and_shutdown_daemon() {
         let daemon = ScamperDaemon::spawn(10).await.unwrap();
         daemon.shutdown().await.unwrap();
