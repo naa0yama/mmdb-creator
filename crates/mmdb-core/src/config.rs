@@ -60,10 +60,7 @@ pub struct WhoisConfig {
     /// Delay in milliseconds between consecutive RIPE Stat REST API requests (default: 1000)
     #[serde(default = "default_ripe_stat_rate_limit_ms")]
     pub ripe_stat_rate_limit_ms: u64,
-    /// Delay in milliseconds between consecutive bgp.tools REST API requests (default: 1000)
-    #[serde(default = "default_bgptool_rate_limit_ms")]
-    pub bgptool_rate_limit_ms: u64,
-    /// Directory to store REST API response caches (RIPE Stat + bgp.tools). Default: "data/cache"
+    /// Directory to store REST API response caches (RIPE Stat per-ASN). Default: "data/cache"
     #[serde(default = "default_cache_dir")]
     pub cache_dir: String,
     /// Cache TTL in seconds for REST API responses (default: 7200 = 2 hours)
@@ -94,10 +91,6 @@ const fn default_initial_backoff_ms() -> u64 {
 }
 
 const fn default_ripe_stat_rate_limit_ms() -> u64 {
-    1000
-}
-
-const fn default_bgptool_rate_limit_ms() -> u64 {
     1000
 }
 

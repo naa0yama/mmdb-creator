@@ -29,17 +29,17 @@ ASN が広報している CIDR リストから最も細かい CIDR 単位の MMD
 
 ### Subcommands
 
-| Subcommand | Purpose                                             | Data Source                                                            |
-| ---------- | --------------------------------------------------- | ---------------------------------------------------------------------- |
-| `import`   | データ収集 (whois + xlsx)                           | `--whois`: RIPE Stat / bgp.tools / whois TCP 43, `--xlsx`: Excel files |
-| `export`   | 収集データを統合して MMDB を生成                    | data/*.jsonl → NDJSON → mmdbctl                                        |
-| `scan`     | CIDR の demarc 探索 (scamper ICMP-Paris traceroute) | import の出力データ (data/*.jsonl)                                     |
+| Subcommand | Purpose                                             | Data Source                                                |
+| ---------- | --------------------------------------------------- | ---------------------------------------------------------- |
+| `import`   | データ収集 (whois + xlsx)                           | `--whois`: RIPE Stat / whois TCP 43, `--xlsx`: Excel files |
+| `export`   | 収集データを統合して MMDB を生成                    | data/*.jsonl → NDJSON → mmdbctl                            |
+| `scan`     | CIDR の demarc 探索 (scamper ICMP-Paris traceroute) | import の出力データ (data/*.jsonl)                         |
 
 ### Data Flow
 
 ```text
 mmdb-creator import --whois --asn <number>
-   |  1. RIPE Stat / bgp.tools から広報 CIDR リストを取得
+   |  1. RIPE Stat から広報 CIDR リストを取得
    |     (API レスポンスを data/cache/import/ にキャッシュ)
    |  2. 各 CIDR を whois (TCP 43) に問い合わせ
    |  3. サブアロケーション (CIDR + name) を収集
@@ -123,11 +123,9 @@ mmdb-creator import --config config.json --whois
 
 ### ASN Announced Prefixes (REST API)
 
-| Source                 | Endpoint                                                                   | Note                     |
-| ---------------------- | -------------------------------------------------------------------------- | ------------------------ |
-| RIPE Stat              | `https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS{asn}` | 安定、レートリミット緩め |
-| bgp.tools (per ASN)    | REST API                                                                   | 補完的に使用             |
-| bgp.tools (full table) | `https://bgp.tools/table.jsonl`                                            | BGP フルテーブル (JSONL) |
+| Source    | Endpoint                                                                   | Note                         |
+| --------- | -------------------------------------------------------------------------- | ---------------------------- |
+| RIPE Stat | `https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS{asn}` | 単一参照、レートリミット緩め |
 
 ### whois Query (TCP 43)
 
@@ -351,7 +349,7 @@ GeoLite2-City + ASN 互換フィールド + カスタムフィールド:
 
 - `continent.code` — whois `country` から静的マッピング (後回し可)
 - `country.iso_code` — whois `country` から
-- `autonomous_system_number` / `autonomous_system_organization` — RIPE Stat / bgp.tools
+- `autonomous_system_number` / `autonomous_system_organization` — RIPE Stat
 
 **カスタムフィールド:**
 
@@ -478,7 +476,7 @@ scan の結果は export 時に whois/import データとマージされ、MMDB 
 | `serde`            | 設定ファイル・NDJSON のシリアライズ/デシリアライズ |
 | `serde_json`       | JSON パース / NDJSON 生成                          |
 | `tokio`            | async runtime                                      |
-| `reqwest`          | HTTP クライアント (RIPE Stat / bgp.tools API)      |
+| `reqwest`          | HTTP クライアント (RIPE Stat API)                  |
 | `clap`             | CLI 引数パース                                     |
 | `ipnet`            | CIDR / IP ネットワーク操作                         |
 | `anyhow`           | エラーハンドリング                                 |

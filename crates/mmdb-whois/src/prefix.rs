@@ -1,11 +1,8 @@
-//! Announced prefix resolver using RIPE Stat (primary) and bgp.tools (fallback).
+//! Announced prefix resolver using RIPE Stat.
 //!
-//! Data sources:
+//! Data source:
 //!   - RIPE Stat: <https://stat.ripe.net/data/announced-prefixes/data.json>
 //!     BGP routing observations from ~1,300 RIPE RIS peers. Real-time.
-//!   - bgp.tools table.jsonl: <https://bgp.tools/table.jsonl>
-//!     BGP full table snapshot from IXP-based collectors. Updated ~30 min.
-//!     Downloaded once and cached locally for up to 2 hours.
 
 use std::{
     path::{Path, PathBuf},
@@ -19,7 +16,7 @@ use mmdb_core::{
     types::{AutNumData, WhoisData},
 };
 use serde::Deserialize;
-use tokio::{fs as tfs, io::AsyncBufReadExt as _, time};
+use tokio::{fs as tfs, time};
 
 /// User-Agent sent with every HTTP request.
 const USER_AGENT: &str = concat!(
@@ -31,9 +28,7 @@ const USER_AGENT: &str = concat!(
     ")"
 );
 
-/// REST API client for resolving ASN → announced CIDR list.
-///
-/// Uses RIPE Stat as the primary source with bgp.tools as fallback.
+/// REST API client for resolving ASN → announced CIDR list via RIPE Stat.
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug)]
 pub struct PrefixClient {
@@ -41,8 +36,6 @@ pub struct PrefixClient {
     ripe_stat_rate_limit: Duration,
     ripe_stat_cache_dir: PathBuf,
     ripe_stat_cache_ttl: Duration,
-    bgptools_cache_path: PathBuf,
-    bgptools_cache_ttl: Duration,
     http_max_retries: u32,
     http_retry_delay: Duration,
 }
@@ -65,49 +58,27 @@ impl PrefixClient {
             ripe_stat_rate_limit: Duration::from_millis(cfg.ripe_stat_rate_limit_ms),
             ripe_stat_cache_dir: PathBuf::from(&cfg.cache_dir),
             ripe_stat_cache_ttl: Duration::from_secs(cfg.cache_ttl_secs),
-            bgptools_cache_path: PathBuf::from(&cfg.cache_dir).join("bgptools-table.jsonl"),
-            bgptools_cache_ttl: Duration::from_secs(cfg.cache_ttl_secs),
             http_max_retries: cfg.http_max_retries,
             http_retry_delay: Duration::from_secs(cfg.http_retry_delay_secs),
         })
     }
 
-    /// Fetch announced prefixes for `asn`.
-    ///
-    /// Tries RIPE Stat first; falls back to bgp.tools table.jsonl on failure.
+    /// Fetch announced prefixes for `asn` from RIPE Stat.
     ///
     /// # Errors
     ///
-    /// Returns an error if both sources fail.
+    /// Returns an error if the RIPE Stat request fails.
     pub async fn announced_prefixes(&self, asn: u32) -> Result<Vec<IpNet>> {
-        match self.ripe_stat(asn).await {
-            Ok(prefixes) if !prefixes.is_empty() => {
-                tracing::info!(
-                    asn,
-                    source = "ripe_stat",
-                    count = prefixes.len(),
-                    "prefix: resolved"
-                );
-                return Ok(prefixes);
-            }
-            Ok(_) => {
-                tracing::warn!(
-                    asn,
-                    "prefix: RIPE Stat returned empty list, trying bgp.tools"
-                );
-            }
-            Err(e) => {
-                tracing::warn!(asn, error = %e, "prefix: RIPE Stat failed, trying bgp.tools");
-            }
+        let prefixes = self.ripe_stat(asn).await?;
+        if prefixes.is_empty() {
+            tracing::warn!(asn, "prefix: RIPE Stat returned empty prefix list");
+        } else {
+            tracing::info!(
+                asn,
+                count = prefixes.len(),
+                "prefix: resolved via RIPE Stat"
+            );
         }
-
-        let prefixes = self.bgptools(asn).await?;
-        tracing::info!(
-            asn,
-            source = "bgp.tools",
-            count = prefixes.len(),
-            "prefix: resolved"
-        );
         Ok(prefixes)
     }
 
@@ -433,91 +404,6 @@ impl PrefixClient {
         Ok(entries)
     }
 
-    // ---- bgp.tools ----
-
-    async fn bgptools(&self, asn: u32) -> Result<Vec<IpNet>> {
-        self.ensure_bgptools_cache().await?;
-        self.filter_bgptools_cache(asn).await
-    }
-
-    /// Download bgp.tools table.jsonl if cache is absent or older than TTL.
-    async fn ensure_bgptools_cache(&self) -> Result<()> {
-        if let Some(parent) = self.bgptools_cache_path.parent() {
-            tfs::create_dir_all(parent)
-                .await
-                .with_context(|| format!("failed to create cache dir {}", parent.display()))?;
-        }
-
-        if self.cache_is_fresh().await {
-            tracing::debug!("prefix: bgp.tools cache is fresh, skipping download");
-            return Ok(());
-        }
-
-        tracing::info!("prefix: downloading bgp.tools table.jsonl");
-
-        let resp = self
-            .get_with_retry("https://bgp.tools/table.jsonl")
-            .await
-            .context("bgp.tools table.jsonl download failed")?;
-
-        let bytes = resp
-            .bytes()
-            .await
-            .context("failed to read bgp.tools response body")?;
-
-        tfs::write(&self.bgptools_cache_path, &bytes)
-            .await
-            .with_context(|| {
-                format!(
-                    "failed to write bgp.tools cache to {}",
-                    self.bgptools_cache_path.display()
-                )
-            })?;
-
-        tracing::info!(
-            path = %self.bgptools_cache_path.display(),
-            bytes = bytes.len(),
-            "prefix: bgp.tools cache updated"
-        );
-
-        Ok(())
-    }
-
-    async fn cache_is_fresh(&self) -> bool {
-        is_file_fresh(&self.bgptools_cache_path, self.bgptools_cache_ttl).await
-    }
-
-    /// Read the cached table.jsonl and return prefixes for `asn`.
-    async fn filter_bgptools_cache(&self, asn: u32) -> Result<Vec<IpNet>> {
-        let file = tfs::File::open(&self.bgptools_cache_path)
-            .await
-            .with_context(|| {
-                format!(
-                    "failed to open bgp.tools cache {}",
-                    self.bgptools_cache_path.display()
-                )
-            })?;
-
-        let mut lines = tokio::io::BufReader::new(file).lines();
-        let mut prefixes: Vec<IpNet> = Vec::new();
-        while let Some(line) = lines
-            .next_line()
-            .await
-            .context("failed to read bgp.tools cache line")?
-        {
-            let Ok(entry) = serde_json::from_str::<BgpToolsEntry>(&line) else {
-                continue;
-            };
-            if entry.asn == asn
-                && let Some(net) = parse_prefix_warn(&entry.cidr)
-            {
-                prefixes.push(net);
-            }
-        }
-
-        Ok(prefixes)
-    }
-
     // ---- HTTP helper ----
 
     /// GET with retry (connection errors + 5xx), following redirects.
@@ -733,14 +619,6 @@ struct RipeStatData {
 #[derive(Debug, Deserialize)]
 struct RipeStatPrefix {
     prefix: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct BgpToolsEntry {
-    #[serde(rename = "CIDR")]
-    cidr: String,
-    #[serde(rename = "ASN")]
-    asn: u32,
 }
 
 #[derive(Debug, Deserialize)]

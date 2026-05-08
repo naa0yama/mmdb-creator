@@ -7,7 +7,7 @@ server = "whois.apnic.net"
 # ASN numbers to query when --asn is not given on the CLI
 # asn = [64496, 64497]
 
-# Directory for REST API response caches (RIPE Stat per-ASN + bgp.tools table)
+# Directory for REST API response caches (RIPE Stat per-ASN)
 cache_dir = "data/cache"
 
 # Cache TTL in seconds (default: 7200 = 2 hours)

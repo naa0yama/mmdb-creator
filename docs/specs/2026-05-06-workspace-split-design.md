@@ -26,7 +26,7 @@
 crates/
 ├── mmdb-creator   (binary)  ✅ CLI シェル — 各ライブラリの orchestration
 ├── mmdb-core      (lib)     ✅ 共有型 / 設定スキーマ / 外部コマンドチェック
-├── mmdb-whois     (lib)     ✅ ASN・IP・CIDR → WhoisData (RIPE + bgp.tools + TCP 43)
+├── mmdb-whois     (lib)     ✅ ASN・IP・CIDR → WhoisData (RIPE Stat + TCP 43)
 ├── mmdb-xlsx      (lib)     ✅ Excel R/W のみ (calamine + rust_xlsxwriter)
 ├── mmdb-dns       (lib)     ✅ Team Cymru DNS TXT lookup / PTR reverse lookup (仕様策定後に追加)
 ├── mmdb-scan      (lib)     🔲 scamper デーモン統合 (現在は mmdb-creator/src/scan/ に内包)
@@ -56,7 +56,7 @@ mmdb-web     ──► mmdb-core   (将来)
 | クレート       | 種別   | 状態 | 責務                                                                                      | 主な依存                       |
 | -------------- | ------ | ---- | ----------------------------------------------------------------------------------------- | ------------------------------ |
 | `mmdb-core`    | lib    | ✅   | `MmdbRecord`, `WhoisData`, `RouteData` 等の共有型 / `Config` スキーマ / `require_command` | serde, ipnet, chrono           |
-| `mmdb-whois`   | lib    | ✅   | ASN → 広報 CIDR 取得 (RIPE Stat / bgp.tools) + TCP 43 whois + RPSL パース                 | mmdb-core, tokio, reqwest      |
+| `mmdb-whois`   | lib    | ✅   | ASN → 広報 CIDR 取得 (RIPE Stat) + TCP 43 whois + RPSL パース                             | mmdb-core, tokio, reqwest      |
 | `mmdb-xlsx`    | lib    | ✅   | Excel ファイル読み取り (calamine) / 書き出し (rust_xlsxwriter) のみ                       | calamine, rust_xlsxwriter      |
 | `mmdb-dns`     | lib    | ✅   | Team Cymru DNS TXT で ASN 一括取得 / PTR reverse lookup                                   | hickory-resolver, ipnet, tokio |
 | `mmdb-scan`    | lib    | 🔲   | scamper デーモン起動・停止 / Unix ソケット通信 / JSON パース / TUI 進捗                   | mmdb-core, tokio, indicatif    |
@@ -89,7 +89,7 @@ mmdb-creator import --whois --asn 64496 --ip 192.0.2.0/24
 ### データフロー
 
 ```
---asn  → [RIPE Stat / bgp.tools REST] → 広報 CIDR リスト
+--asn  → [RIPE Stat REST] → 広報 CIDR リスト
                                               ↓
 --ip   → (RIPE Stat をスキップ)   → 入力 IP/CIDR をそのまま使用
                                               ↓
@@ -101,7 +101,7 @@ mmdb-creator import --whois --asn 64496 --ip 192.0.2.0/24
 ### Public API
 
 ```rust
-/// Query by ASN: fetch announced CIDRs from RIPE Stat / bgp.tools, then query whois for each.
+/// Query by ASN: fetch announced CIDRs from RIPE Stat, then query whois for each.
 pub async fn query_asn(
     client: &WhoisClient,
     asn: u32,
@@ -127,8 +127,7 @@ pub async fn query_prefixes(
 		"rate_limit_ms": 2000,
 		"max_retries": 3,
 		"initial_backoff_ms": 1000,
-		"ripe_stat_rate_limit_ms": 1000,
-		"bgptool_rate_limit_ms": 1000
+		"ripe_stat_rate_limit_ms": 1000
 	}
 }
 ```
@@ -137,7 +136,6 @@ pub async fn query_prefixes(
 | ------------------------- | ---------- | ----------------------- |
 | `rate_limit_ms`           | 2000       | TCP 43 クエリ間隔       |
 | `ripe_stat_rate_limit_ms` | 1000       | RIPE Stat REST API 間隔 |
-| `bgptool_rate_limit_ms`   | 1000       | bgp.tools REST API 間隔 |
 
 ### User-Agent
 
@@ -170,7 +168,6 @@ https://stat.ripe.net/data/announced-prefixes/data.json
 | ソース       | 用途                          | エンドポイント                                                                                    |
 | ------------ | ----------------------------- | ------------------------------------------------------------------------------------------------- |
 | RIPE Stat    | ASN → 広報 CIDR リスト        | `https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS{asn}&sourceapp=mmdb-creator` |
-| bgp.tools    | 補完 / フルテーブル           | `https://bgp.tools/table.jsonl` (per-ASN REST API も使用)                                         |
 | whois TCP 43 | CIDR → サブアロケーション情報 | `{config.whois.server}:43`                                                                        |
 
 外部からはこれらのソースは不可視。`WhoisClient::query_asn()` の内部実装詳細。
@@ -190,7 +187,7 @@ https://stat.ripe.net/data/announced-prefixes/data.json
 ### Phase 2: mmdb-whois 抽出 ✅ 完了
 
 - `src/import/whois.rs` → `mmdb-whois/src/`
-- RIPE Stat / bgp.tools クライアントを追加実装
+- RIPE Stat クライアントを追加実装
 - `--ip` オプション対応
 
 ### Phase 3: mmdb-xlsx 新規作成 ✅ 完了
@@ -226,7 +223,4 @@ https://stat.ripe.net/data/announced-prefixes/data.json
 
 ## Open Questions
 
-- `mmdb-whois` の `query_asn` で RIPE Stat と bgp.tools の両方を叩くか、
-  設定で切り替えるか (現時点は RIPE Stat primary, bgp.tools は補完)
-- bgp.tools フルテーブル (`table.jsonl`) の利用タイミング
-  (per-ASN API で足りない場合のフォールバック?)
+- RIPE Stat が空リストを返した場合の扱い (現時点: 警告ログを出して空を返す)
