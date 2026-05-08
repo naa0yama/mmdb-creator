@@ -5,6 +5,7 @@ mod cache;
 mod cli;
 mod export;
 mod import;
+#[cfg(unix)]
 mod scan;
 mod telemetry;
 mod validate;
@@ -121,7 +122,13 @@ async fn main() -> anyhow::Result<()> {
                 enrich_only,
                 ip,
             } => {
+                #[cfg(unix)]
                 scan::run(&config, force, enrich_only, ip.as_deref()).await?;
+                #[cfg(not(unix))]
+                {
+                    let _ = (force, enrich_only, ip);
+                    anyhow::bail!("scan subcommand requires Unix; use WSL2 on Windows");
+                }
             }
             cli::Command::Validate { init_sheets } => {
                 validate::run(&config, init_sheets)?;
