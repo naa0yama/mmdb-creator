@@ -11,6 +11,7 @@ use calamine::{Data, Range, Reader, Xlsx, open_workbook};
 use indexmap::IndexMap;
 use ipnet::IpNet;
 use mmdb_core::config::{ColumnMapping, ColumnType, SheetConfig};
+use serde::Serialize;
 
 use crate::address::parse_addresses;
 
@@ -28,7 +29,8 @@ pub struct SheetInfo {
 }
 
 /// A single typed cell value produced from an Excel cell.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(untagged)]
 pub enum CellValue {
     /// UTF-8 string.
     String(std::string::String),
@@ -36,12 +38,12 @@ pub enum CellValue {
     Integer(i64),
     /// Boolean.
     Bool(bool),
-    /// One or more parsed IP network prefixes.
+    /// One or more parsed IP network prefixes (serialised as CIDR strings).
     Addresses(Vec<IpNet>),
 }
 
 /// A single data row parsed from an Excel sheet.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct XlsxRow {
     /// 0-indexed row offset from the first data row (i.e. the row after the header).
     pub row_index: usize,

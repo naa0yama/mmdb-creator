@@ -960,6 +960,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ipnetwork"
+version = "0.21.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf370abdafd54d13e54a620e8c3e1145f28e46cc9d704bc6d94414559df41763"
+
+[[package]]
 name = "iri-string"
 version = "0.7.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1106,6 +1112,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "maxminddb"
+version = "0.28.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "faf6467428ad055b71e588bcedcbaf2ff605b3251deb0c52be4a04b674c546dd"
+dependencies = [
+ "ipnetwork",
+ "log",
+ "memchr",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
 name = "memchr"
 version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1133,18 +1152,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "mmdb-core"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "ipnet",
- "serde",
- "serde_json",
- "toml",
-]
-
-[[package]]
-name = "mmdb-creator"
+name = "mmdb-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -1153,9 +1161,12 @@ dependencies = [
  "chrono",
  "clap",
  "gethostname",
+ "indexmap",
  "ipnet",
+ "maxminddb",
  "mmdb-core",
  "mmdb-dns",
+ "mmdb-scan",
  "mmdb-whois",
  "mmdb-xlsx",
  "opentelemetry",
@@ -1164,6 +1175,7 @@ dependencies = [
  "opentelemetry-semantic-conventions",
  "opentelemetry_sdk",
  "predicates",
+ "regex",
  "reqwest 0.13.3",
  "rustls",
  "serde",
@@ -1178,6 +1190,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "mmdb-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ipnet",
+ "serde",
+ "serde_json",
+ "toml",
+]
+
+[[package]]
 name = "mmdb-dns"
 version = "0.1.0"
 dependencies = [
@@ -1186,6 +1209,25 @@ dependencies = [
  "ipnet",
  "serde",
  "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "mmdb-scan"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "indexmap",
+ "ipnet",
+ "mmdb-core",
+ "mmdb-dns",
+ "mmdb-xlsx",
+ "regex",
+ "serde",
+ "serde_json",
+ "tempfile",
  "tokio",
  "tracing",
 ]
@@ -1215,8 +1257,10 @@ dependencies = [
  "ipnet",
  "mmdb-core",
  "regex",
+ "serde",
  "serde_json",
  "tempfile",
+ "tokio",
  "tracing",
 ]
 

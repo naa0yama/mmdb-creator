@@ -52,16 +52,16 @@ mod tests {
 
     #[test]
     fn errors_on_missing_command() {
-        let result = require_command("__no_such_command_mmdb_creator__");
+        let result = require_command("__no_such_command_mmdb_cli__");
         assert!(result.is_err());
         let msg = result.unwrap_err().to_string();
-        assert!(msg.contains("__no_such_command_mmdb_creator__"));
+        assert!(msg.contains("__no_such_command_mmdb_cli__"));
         assert!(msg.contains("PATH"));
     }
 
     #[test]
     fn require_commands_fails_on_first_missing() {
-        let result = require_commands(&["ls", "__no_such_command_mmdb_creator__"]);
+        let result = require_commands(&["ls", "__no_such_command_mmdb_cli__"]);
         assert!(result.is_err());
     }
 

@@ -17,8 +17,8 @@ For universal Miri rules and decision flowchart, see
 
 ### Per-Test Skip Categories
 
-1. **Process spawning (assert_cmd / Command)** — 7 tests. Integration tests in `crates/mmdb-creator/tests/integration_test.rs` execute the binary via `std::process::Command`. Miri does not support subprocess spawning.
-2. **sysinfo / sysconf (process metrics)** — 4 tests. Tests calling sysinfo methods trigger `sysconf(_SC_CLK_TCK)` internally. Miri does not stub this syscall. Files: `crates/mmdb-creator/src/telemetry/metrics/process.rs`. Use `#[cfg_attr(miri, ignore)]` on individual tests.
+1. **Process spawning (assert_cmd / Command)** — 7 tests. Integration tests in `crates/mmdb-cli/tests/integration_test.rs` execute the binary via `std::process::Command`. Miri does not support subprocess spawning.
+2. **sysinfo / sysconf (process metrics)** — 4 tests. Tests calling sysinfo methods trigger `sysconf(_SC_CLK_TCK)` internally. Miri does not stub this syscall. Files: `crates/mmdb-cli/src/telemetry/metrics/process.rs`. Use `#[cfg_attr(miri, ignore)]` on individual tests.
 3. **File system (tempfile)** — Tests using `tempfile::tempdir()` or real file I/O. Miri has limited file system support.
 4. **TLS / Crypto (reqwest + rustls)** — TLS initialization is extremely slow under Miri (~10 min/call). Any test exercising the HTTP client must be ignored.
 5. **Regex compilation (mmdb-xlsx)** — DFA construction under interpretation is extremely slow (~2-6 min/test). Tests in `crates/mmdb-xlsx/src/address.rs` call `parse_addresses` which initialises a `OnceLock<Regex>` on first call. All 15 unit tests in `address.rs` and 11 integration tests in `crates/mmdb-xlsx/tests/integration_test.rs` (which call `read_xlsx` → `parse_addresses`) need `#[cfg_attr(miri, ignore)]`.
@@ -30,7 +30,7 @@ For universal Miri rules and decision flowchart, see
 | ------------------------------------------ | ----- |
 | Total tests                                | 103   |
 | Per-crate breakdown: mmdb-core             | 4     |
-| Per-crate breakdown: mmdb-creator          | 44    |
+| Per-crate breakdown: mmdb-cli              | 44    |
 | Per-crate breakdown: mmdb-whois            | 17    |
 | Per-crate breakdown: mmdb-xlsx             | 38    |
 | Miri-annotated (cfg_attr)                  | 11    |

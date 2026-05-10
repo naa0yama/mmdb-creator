@@ -1,5 +1,8 @@
 # mmdb-creator configuration
 
+# ──────────────────────────────────────────────────────────────────────────────
+# WHOIS
+# ──────────────────────────────────────────────────────────────────────────────
 [whois]
 # Whois server hostname (TCP port 43)
 server = "whois.apnic.net"
@@ -8,10 +11,10 @@ server = "whois.apnic.net"
 # asn = [64496, 64497]
 
 # Directory for REST API response caches (RIPE Stat per-ASN)
-cache_dir = "data/cache"
+cache_dir = "data/cache/import"
 
-# Cache TTL in seconds (default: 7200 = 2 hours)
-# cache_ttl_secs = 7200
+# Cache TTL in seconds (default: 604800 = 7 days)
+# cache_ttl_secs = 604800
 
 # TCP 43 query delay in milliseconds between consecutive queries (default: 2000)
 # rate_limit_ms = 2000
@@ -20,16 +23,45 @@ cache_dir = "data/cache"
 # http_max_retries = 3
 # http_retry_delay_secs = 2
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Sheets
+# ──────────────────────────────────────────────────────────────────────────────
 # [[sheets]]
-# filename = "sheets_A.xlsx"
-# header_row = 1
+# filename = "IPAM.xlsx"
+# header_row = 3
 # excludes_sheets = ["Power"]
 #
 # [[sheets.columns]]
-# name = "region"
-# sheet_name = "Region"
-# type = "string"        # string | integer | addresses | bool
+# name = "host"
+# sheet_name = "host"
+# type = "string"
+# ptr_field = "device"      # links this column to the PTR capture group "device"
+#
+# [[sheets.columns]]
+# name = "site"
+# sheet_name = "site"
+# type = "string"
+# ptr_field = "facility"    # links this column to the PTR capture group "facility"
+#
+# [[sheets.columns]]
+# name = "port"
+# sheet_name = "port"
+# type = "string"
+# ptr_field = "interface"   # links this column to the PTR capture group "interface"
+#
+# [[sheets.columns]]
+# name = "network"
+# sheet_name = "Network"
+# type = "addresses"        # CIDR list; used as scan targets
+#
+# [[sheets.columns]]
+# name = "serviceid"
+# sheet_name = "ServiceID"
+# type = "string"           # no ptr_field = payload-only column
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Scan
+# ──────────────────────────────────────────────────────────────────────────────
 # [scan]
 # scamper global packets-per-second limit (default: 50)
 # pps = 50
@@ -37,8 +69,8 @@ cache_dir = "data/cache"
 # Probes per hop sent by scamper -q (default: 3)
 # probes = 3
 #
-# Maximum concurrent targets submitted to scamper (default: 100)
-# window = 100
+# Maximum concurrent targets submitted to scamper (default: 200)
+# window = 200
 #
 # Flush scan.jsonl writer buffer after this many records (default: 100)
 # flush_count = 100
@@ -46,5 +78,81 @@ cache_dir = "data/cache"
 # Flush scan.jsonl writer buffer after this many seconds (default: 5)
 # flush_interval_sec = 5
 #
-# DNS nameservers for PTR reverse lookup (empty = OS default)
-# nameservers = ["8.8.8.8", "1.1.1.1"]
+# Maximum concurrent DNS lookups for PTR enrichment (default: 10)
+# dns_concurrency = 10
+#
+# DNS-over-HTTPS server: "cloudflare" (default) | "google" | "quad9"
+# doh_server = "cloudflare"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Normalisation pipelines for PTR-to-xlsx field matching.
+#
+# Each [normalize.<name>] entry defines rules applied to both the PTR-captured
+# value and the corresponding xlsx column value before comparison.
+# The key name must match both a PTR capture group and a ptr_field value.
+# ──────────────────────────────────────────────────────────────────────────────
+#
+# [normalize.interface]
+# # Regex substitution rules to convert PTR-captured interface names to a
+# # DNS-safe normalised form.  Longer/more-specific patterns MUST precede
+# # shorter ones that are substrings.  Use `validate --ptr` to discover which
+# # PTR hostnames remain unmatched and add rules incrementally.
+# rules = [
+#   { pattern = '/', replacement = "-" },
+#   { pattern = '\.', replacement = "-" },
+# ]
+# case = "lower"    # "lower" (default) | "upper" | "none"
+# # Regex patterns matched against the normalised captured value; matched entries are suppressed in `validate --ptr`.
+# # Example: excludes = ['^lo\d*$', '^mgmt\d*$']
+# excludes = []
+#
+# [normalize.device]
+# case = "lower"
+# # Regex patterns matched against the normalised captured value; matched entries are suppressed in `validate --ptr`.
+# excludes = []
+#
+# [normalize.facility]
+# case = "lower"
+# # Regex patterns matched against the normalised captured value; matched entries are suppressed in `validate --ptr`.
+# excludes = []
+
+# PTR hostname patterns used to identify backbone network devices.
+# Entries are evaluated in definition order; the first match wins.
+# Each entry requires a `regex` field with named capture groups.
+# Supported group names (all optional):
+#   interface    — interface name, e.g. "xe-0-0-1"
+#   device       — full device identifier, e.g. "rtr0101"
+#   device_role  — role portion of the device name, e.g. "rtr"
+#   facility     — site or facility name, e.g. "dc01"
+#   facing       — raw prefix label ("user", "virtual", "user.virtual")
+#   customer_asn — BGP ASN as a decimal string (parsed to u32 in output)
+#
+# Option A: {placeholder} syntax — each {name} expands to (?P<name>[^.]+)
+# [[scan.ptr_patterns]]
+# domain = "example.net"
+# regex = "{interface}.{device}.{facility}"
+# # → ^(?P<interface>[^.]+)\.(?P<device>[^.]+)\.(?P<facility>[^.]+)\.example\.net$
+# # Regex patterns applied to the full PTR hostname; matched entries are suppressed in `validate --ptr`.
+# # Example: excludes = ['\.ad\.example\.net$', '\.transit\.example\.net$']
+# excludes = []
+#
+# Option B: raw regex (backward-compatible; no {placeholder} expansion)
+# [[scan.ptr_patterns]]
+# domain = "example.ad.jp"
+# regex = '''(?x)
+#   ^(?:(?P<facing>user(?:\.virtual)?|virtual)\.)?
+#   (?:as(?P<customer_asn>\d+)\.)?
+#   (?P<interface>(?:ge|xe|et)-[\d-]+)
+#   (?:\.[a-z]+\d+)?\.
+#   (?P<device>(?P<device_role>[a-z]+)\d+)\.
+#   (?P<facility>[a-z0-9]+)\.
+#   example\.ad\.jp$
+# '''
+# excludes = []
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Enrich
+# ──────────────────────────────────────────────────────────────────────────────
+# [enrich]
+# Path to the MMDB file generated by the export subcommand (default: "output.mmdb")
+# mmdb_path = "output.mmdb"

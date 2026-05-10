@@ -13,11 +13,14 @@ indexmap = { workspace = true }
 ipnet = { workspace = true }
 mmdb-core = { path = "../mmdb-core" }
 regex = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
+tokio = { version = "1", features = ["fs", "io-util"] }
 tracing = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 [lints]
 workspace = true

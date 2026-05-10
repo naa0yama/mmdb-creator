@@ -7,33 +7,27 @@ use serde::{Deserialize, Serialize};
 pub struct MmdbRecord {
     /// CIDR range or single address (/32, /128) — key for the `MMDB` tree.
     pub range: String,
-    /// Record creation timestamp (ISO 8601 UTC).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub created_at: Option<String>,
-    /// Record last-update timestamp (ISO 8601 UTC).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub updated_at: Option<String>,
     /// GeoLite2-compatible continent code.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub continent: Option<Continent>,
     /// GeoLite2-compatible country ISO code.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub country: Option<Country>,
-    /// ASN that announces this prefix.
+    /// ASN that announces this prefix (GeoLite2-ASN compatible).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub autonomous_system_number: Option<u32>,
-    /// Organisation name for the announcing ASN.
+    /// Organisation name for the announcing ASN (GeoLite2-ASN compatible).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub autonomous_system_organization: Option<String>,
-    /// Data sourced from whois (TCP 43).
+    /// Whois-derived metadata for this prefix.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub whois: Option<WhoisData>,
+    pub whois: Option<WhoisExport>,
+    /// Gateway device that serves this prefix, identified via PTR patterns.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gateway: Option<GatewayExport>,
     /// Data sourced from Excel (.xlsx) files.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub operational: Option<OperationalData>,
-    /// Route data collected by the scan subcommand.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub routes: Option<RouteData>,
 }
 
 /// GeoLite2-compatible continent field.
@@ -48,6 +42,53 @@ pub struct Continent {
 pub struct Country {
     /// ISO 3166-1 alpha-2 country code (e.g. "JP").
     pub iso_code: String,
+}
+
+/// Whois-derived metadata exported to the MMDB record.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WhoisExport {
+    /// IP range string from inetnum field (e.g. "192.0.2.0 - 192.0.2.255").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inetnum: Option<String>,
+    /// Network name from the whois `netname` field.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub netname: Option<String>,
+    /// Description from the whois `descr` field.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub descr: Option<String>,
+    /// Data source RIR from the whois `source` field (e.g. "APNIC").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// Last-modified timestamp from the whois `last-modified` field.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_modified: Option<String>,
+}
+
+/// Gateway device info exported to the MMDB record.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GatewayExport {
+    /// IP address of the gateway hop.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ip: Option<String>,
+    /// PTR record of the gateway IP.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ptr: Option<String>,
+    /// Full device identifier parsed from PTR (e.g. `"rtr0101"`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
+    /// Role portion of the device name (e.g. `"rtr"`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_role: Option<String>,
+    /// Site or facility name parsed from PTR (e.g. `"colo05"`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub facility: Option<String>,
+    /// Interface name parsed from PTR (e.g. `"xe-0-0-1"`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interface: Option<String>,
+    /// Normalised facing direction: `"network"` / `"user"` / `"virtual"` /
+    /// `"user_virtual"` / `"bgp_peer"`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub facing: Option<String>,
 }
 
 /// Data sourced from whois (TCP 43) queries.
@@ -140,6 +181,99 @@ pub struct ScanRecord {
     pub range: String,
     /// Route data collected by scamper icmp-paris for this target.
     pub routes: RouteData,
+}
+
+/// Structured device fields parsed from a matching PTR record.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GatewayDevice {
+    /// Interface name (e.g. `"xe-0-0-1"`).
+    pub interface: Option<String>,
+    /// Full device identifier (e.g. `"rtr0101"`).
+    pub device: Option<String>,
+    /// Role portion of the device name (e.g. `"rtr"`).
+    pub device_role: Option<String>,
+    /// Site or facility name (e.g. `"dc01"`).
+    pub facility: Option<String>,
+    /// Normalised facing direction: `"network"` / `"user"` / `"virtual"` /
+    /// `"user_virtual"` / `"bgp_peer"`.
+    pub facing: Option<String>,
+    /// BGP ASN for peering interfaces; present when PTR has an `as<N>.` prefix.
+    pub customer_asn: Option<u32>,
+}
+
+/// Gateway information for a scanned range, always present in [`ScanGwRecord`].
+///
+/// All fields are serialised unconditionally so downstream parsers can rely on
+/// key presence even when values are `null`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GatewayInfo {
+    /// IP address of the winning gateway hop.
+    pub ip: Option<String>,
+    /// PTR record of the gateway IP.
+    pub ptr: Option<String>,
+    /// Number of traces that voted for this gateway IP.
+    pub votes: usize,
+    /// Total number of traces for this range.
+    pub total: usize,
+    /// Resolution status: `"inservice"` / `"no_hops"` / `"no_ptr_match"`.
+    pub status: String,
+    /// Structured device info parsed from the PTR; `null` when not matched.
+    pub device: Option<GatewayDevice>,
+}
+
+/// A range-aggregated gateway record written to `data/scanned.jsonl`.
+///
+/// One record per unique CIDR, produced by the GW resolution phase that runs
+/// after PTR enrichment.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScanGwRecord {
+    /// Network prefix in CIDR notation — the scanned range.
+    pub range: String,
+    /// Network name from the whois `netname` field.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub netname: Option<String>,
+    /// Description from the whois `descr` field.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub descr: Option<String>,
+    /// AS number string from the aut-num whois object (e.g. `"AS64496"`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub as_num: Option<String>,
+    /// AS name from the aut-num whois object.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub as_name: Option<String>,
+    /// AS description from the aut-num whois object.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub as_descr: Option<String>,
+    /// IP range string from the whois `inetnum` field.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inetnum: Option<String>,
+    /// ISO 3166-1 alpha-2 country code from the whois `country` field.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub country: Option<String>,
+    /// Data source RIR from the whois `source` field (e.g. `"APNIC"`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub whois_source: Option<String>,
+    /// Last-modified timestamp from the whois `last-modified` field.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub whois_last_modified: Option<String>,
+    /// Gateway information; always present.
+    pub gateway: GatewayInfo,
+    /// TTL-aggregated hops up to and including the gateway hop.
+    /// Empty when `gateway.status` is `"no_hops"`.
+    /// Contains all aggregated hops when `gateway.status` is `"no_ptr_match"`.
+    pub routes: Vec<Hop>,
+    /// Host IP for narrow prefixes — reserved for a future host-analysis phase.
+    #[serde(skip)]
+    pub host_ip: Option<String>,
+    /// PTR record of the host IP — reserved for a future host-analysis phase.
+    #[serde(skip)]
+    pub host_ptr: Option<String>,
+    /// Timestamp of the earliest trace in this range (ISO 8601 UTC).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub measured_at: Option<String>,
+    /// xlsx row matched via PTR fields or CIDR lookup; absent when no match.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub xlsx: Option<serde_json::Value>,
 }
 
 /// A single hop in a scamper icmp-paris trace.

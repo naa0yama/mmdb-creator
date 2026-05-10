@@ -181,29 +181,30 @@ mise run pre-commit       # clean:sweep + fmt:check + clippy:strict + ast-grep +
 ├── crates/                     # ワークスペースクレート
 │   ├── mmdb-core/              # 共有型・設定・外部データ (lib)
 │   │   └── src/
+│   │       ├── build.rs        # MMDB レコード変換ロジック
 │   │       ├── config.rs       # 設定読み込み
 │   │       ├── external.rs     # 外部データ型
 │   │       └── types.rs        # 共有型定義
-│   ├── mmdb-creator/           # CLI バイナリクレート (メインエントリーポイント)
+│   ├── mmdb-cli/               # CLI バイナリクレート (thin client)
 │   │   ├── src/
 │   │   │   ├── main.rs         # アプリケーションのエントリーポイント
 │   │   │   ├── cli.rs          # CLI 引数定義 (clap)
 │   │   │   ├── backup.rs       # ローテーティングバックアップユーティリティ
 │   │   │   ├── cache.rs        # キャッシュ管理
-│   │   │   ├── libs.rs         # 共有ライブラリ再エクスポート
 │   │   │   ├── validate.rs     # 検証サブコマンド
+│   │   │   ├── build/          # build サブコマンド
 │   │   │   ├── enrich/         # エンリッチサブコマンド
-│   │   │   ├── export/         # エクスポートサブコマンド
 │   │   │   ├── import/         # インポートサブコマンド
-│   │   │   ├── scan/           # スキャンサブコマンド
+│   │   │   ├── scan/           # スキャンサブコマンド (thin wrapper)
 │   │   │   └── telemetry/      # OpenTelemetry 初期化
 │   │   ├── tests/
 │   │   │   └── integration_test.rs  # 統合テスト
 │   │   ├── build.rs            # ビルドスクリプト
 │   │   └── Cargo.toml          # クレート設定
 │   ├── mmdb-dns/               # DNS 逆引き・AS 情報取得 (lib)
-│   ├── mmdb-whois/             # WHOIS / RPSL プレフィックス照会 (lib)
-│   └── mmdb-xlsx/              # Excel (xlsx) 読み込み・アドレス解析 (lib)
+│   ├── mmdb-scan/              # scamper 統合 / CIDR 展開 / enrich (lib)
+│   ├── mmdb-whois/             # WHOIS / RPSL プレフィックス照会 + JSONL 書き出し (lib)
+│   └── mmdb-xlsx/              # Excel (xlsx) 読み込み・フィルタ・JSONL 書き出し (lib)
 ├── docs/                       # ドキュメント
 ├── .editorconfig               # エディター設定
 ├── .gitignore                  # Git除外設定

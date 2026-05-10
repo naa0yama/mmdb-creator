@@ -9,6 +9,7 @@
 //!    skipping the RIPE Stat lookup.
 
 pub mod client;
+pub mod import;
 pub mod prefix;
 pub mod rpsl;
 

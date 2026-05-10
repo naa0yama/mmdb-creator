@@ -1,5 +1,6 @@
 //! Configuration file schema for mmdb-creator.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result};
@@ -15,6 +16,51 @@ pub struct Config {
     pub sheets: Option<Vec<SheetConfig>>,
     /// Scan subcommand configuration.
     pub scan: Option<ScanConfig>,
+    /// Enrich subcommand configuration.
+    pub enrich: Option<EnrichConfig>,
+    /// Named normalisation rule sets (`[normalize.<name>]`).
+    #[serde(default)]
+    pub normalize: HashMap<String, NormalizeConfig>,
+}
+
+/// A single regex substitution rule within a normalisation pipeline.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Deserialize)]
+pub struct NormalizeRule {
+    /// Regex pattern to match (compiled once at startup).
+    pub pattern: String,
+    /// Replacement string; supports `$1`, `$name` back-references.
+    pub replacement: String,
+}
+
+/// Case transformation applied after all substitution rules.
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum NormalizeCase {
+    /// Convert to lowercase (default).
+    #[default]
+    Lower,
+    /// Convert to uppercase.
+    Upper,
+    /// Leave case unchanged.
+    None,
+}
+
+/// Normalisation pipeline for a named field (e.g. `[normalize.interface]`).
+#[allow(dead_code, clippy::module_name_repetitions)]
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct NormalizeConfig {
+    /// Sequential substitution rules applied in order.
+    #[serde(default)]
+    pub rules: Vec<NormalizeRule>,
+    /// Case transformation applied after all substitution rules.
+    #[serde(default)]
+    pub case: NormalizeCase,
+    /// Regex patterns matched against the normalised field value after capture.
+    /// Records whose captured value matches any entry are suppressed in
+    /// `validate --ptr` output (e.g. loopback or management interfaces).
+    #[serde(default)]
+    pub excludes: Vec<String>,
 }
 
 impl Config {
@@ -115,7 +161,7 @@ fn default_cache_dir() -> String {
 // NOTEST(cfg): serde default callback — trivial constant
 #[cfg_attr(coverage_nightly, coverage(off))]
 const fn default_cache_ttl_secs() -> u64 {
-    7200
+    604_800 // 7 days
 }
 
 // NOTEST(cfg): serde default callback — trivial constant
@@ -128,6 +174,25 @@ const fn default_http_max_retries() -> u32 {
 #[cfg_attr(coverage_nightly, coverage(off))]
 const fn default_http_retry_delay_secs() -> u64 {
     2
+}
+
+/// A single PTR hostname pattern used to identify backbone devices.
+///
+/// Entries are evaluated in definition order; the first match wins.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PtrPattern {
+    /// PTR domain suffix filter (e.g. `"example.ad.jp"`).
+    /// When absent, the pattern is tried for every PTR record.
+    pub domain: Option<String>,
+    /// Regex applied to the full PTR string when the domain filter passes.
+    /// Recognised named capture groups: `interface`, `device`, `device_role`,
+    /// `facility`, `facing`, `customer_asn`.
+    pub regex: String,
+    /// Regex patterns applied to the full PTR hostname before regex matching.
+    /// PTRs that match any entry are silently suppressed (not reported by
+    /// `validate --ptr` and not matched by this pattern).
+    #[serde(default)]
+    pub excludes: Vec<String>,
 }
 
 /// Configuration for the scan subcommand.
@@ -155,6 +220,10 @@ pub struct ScanConfig {
     /// DNS-over-HTTPS server for enrichment: `"cloudflare"` (default), `"google"`, or `"quad9"`.
     #[serde(default = "default_doh_server")]
     pub doh_server: String,
+    /// PTR hostname patterns used to identify backbone devices.
+    /// Evaluated in order; the first matching pattern wins.
+    #[serde(default)]
+    pub ptr_patterns: Vec<PtrPattern>,
 }
 
 impl Default for ScanConfig {
@@ -169,6 +238,7 @@ impl Default for ScanConfig {
             flush_interval_sec: default_scan_flush_interval_sec(),
             dns_concurrency: default_dns_concurrency(),
             doh_server: default_doh_server(),
+            ptr_patterns: Vec::new(),
         }
     }
 }
@@ -215,9 +285,24 @@ fn default_doh_server() -> String {
     String::from("cloudflare")
 }
 
-/// Configuration for a single Excel file import.
+/// Configuration for the enrich subcommand.
 #[allow(dead_code, clippy::module_name_repetitions)]
 #[derive(Debug, Deserialize)]
+pub struct EnrichConfig {
+    /// Path to the MMDB file produced by the export subcommand (default: `"output.mmdb"`).
+    #[serde(default = "default_mmdb_path")]
+    pub mmdb_path: PathBuf,
+}
+
+// NOTEST(cfg): serde default callback — returns constant string
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn default_mmdb_path() -> PathBuf {
+    PathBuf::from("output.mmdb")
+}
+
+/// Configuration for a single Excel file import.
+#[allow(dead_code, clippy::module_name_repetitions)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct SheetConfig {
     /// Path to the Excel file
     pub filename: PathBuf,
@@ -240,7 +325,7 @@ const fn default_header_row() -> u32 {
 
 /// Mapping from an Excel column header to an output field.
 #[allow(dead_code)]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct ColumnMapping {
     /// Output field name
     pub name: String,
@@ -249,10 +334,15 @@ pub struct ColumnMapping {
     /// Data type for parsing
     #[serde(rename = "type")]
     pub col_type: ColumnType,
+    /// PTR capture group name used as a join key for PTR-to-xlsx matching.
+    /// When set, `Config.normalize[ptr_field]` rules are applied to both
+    /// the PTR-captured value and this column's value before comparison.
+    #[serde(default)]
+    pub ptr_field: Option<String>,
 }
 
 /// Supported column data types.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ColumnType {
     /// UTF-8 string value.

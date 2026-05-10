@@ -50,10 +50,24 @@ pub async fn lookup(
         });
     }
 
+    let total = ips.len();
+    let mut completed: usize = 0;
+    let mut last_pct: usize = 0;
     let mut results = HashMap::new();
     while let Some(res) = set.join_next().await {
         if let Ok(Some((ip, name))) = res {
             results.insert(ip, name);
+        }
+        completed = completed.saturating_add(1);
+        if total > 0 {
+            let pct = completed
+                .saturating_mul(100)
+                .checked_div(total)
+                .unwrap_or(0);
+            if pct > last_pct || completed == total {
+                tracing::info!(completed, total, pct, "ptr: progress");
+                last_pct = pct;
+            }
         }
     }
     results

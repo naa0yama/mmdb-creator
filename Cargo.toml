@@ -7,9 +7,10 @@ resolver = "3"
 # Project-specific dependencies are listed here.
 
 members = [
+	"crates/mmdb-cli",
 	"crates/mmdb-core",
-	"crates/mmdb-creator",
 	"crates/mmdb-dns",
+	"crates/mmdb-scan",
 	"crates/mmdb-whois",
 	"crates/mmdb-xlsx",
 ]
@@ -33,6 +34,7 @@ repository = "https://github.com/naa0yama/mmdb-creator"
 hickory-resolver = { version = "0.26", default-features = false, features = ["https-ring", "webpki-roots", "tokio"] }
 mmdb-core = { path = "crates/mmdb-core" }
 mmdb-dns = { path = "crates/mmdb-dns" }
+mmdb-scan = { path = "crates/mmdb-scan" }
 mmdb-whois = { path = "crates/mmdb-whois" }
 mmdb-xlsx = { path = "crates/mmdb-xlsx" }
 
@@ -46,8 +48,9 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-uti
 ## Data
 calamine = "0.34"
 chrono = { version = "0.4", features = ["serde"] }
-indexmap = "2"
-ipnet = "2.11"
+indexmap = { version = "2", features = ["serde"] }
+ipnet = { version = "2.11", features = ["serde"] }
+maxminddb = "0.28.1"
 regex = "1"
 reqwest = { version = "0.13.1", default-features = false, features = ["rustls-no-provider", "json"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }

@@ -1,7 +1,7 @@
 ---
 name: project-conventions
 description: >-
-  Project-specific conventions for the mmdb-creator Rust CLI. Overrides
+  Project-specific conventions for the mmdb-cli Rust CLI. Overrides
   and extends the shared rust-project-conventions skill with project-specific
   commands, OTel configuration, and project structure. Use when writing,
   reviewing, or modifying .rs files, running builds/tests, or creating commits.
@@ -9,7 +9,7 @@ description: >-
 license: AGPL-3.0
 ---
 
-# Project Conventions — mmdb-creator (Override)
+# Project Conventions — mmdb-cli (Override)
 
 > **Base rules**: See `~/.claude/skills/rust-project-conventions/SKILL.md` for
 > shared conventions (error context, logging, imports, workflow, comments,

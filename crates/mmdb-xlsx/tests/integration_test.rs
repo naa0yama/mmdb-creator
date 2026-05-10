@@ -37,26 +37,31 @@ fn test_config() -> SheetConfig {
                 name: "site".to_owned(),
                 sheet_name: "site".to_owned(),
                 col_type: ColumnType::String,
+                ptr_field: None,
             },
             ColumnMapping {
                 name: "host".to_owned(),
                 sheet_name: "host".to_owned(),
                 col_type: ColumnType::String,
+                ptr_field: None,
             },
             ColumnMapping {
                 name: "vlanid".to_owned(),
                 sheet_name: "VLANID".to_owned(),
                 col_type: ColumnType::Integer,
+                ptr_field: None,
             },
             ColumnMapping {
                 name: "demarc_addresses".to_owned(),
                 sheet_name: "DEMARC addresses".to_owned(),
                 col_type: ColumnType::Addresses,
+                ptr_field: None,
             },
             ColumnMapping {
                 name: "use".to_owned(),
                 sheet_name: "use".to_owned(),
                 col_type: ColumnType::Bool,
+                ptr_field: None,
             },
         ],
     }

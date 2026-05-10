@@ -1,0 +1,159 @@
+//! CLI argument definitions for mmdb-creator.
+
+use std::path::PathBuf;
+
+use clap::{Parser, Subcommand};
+
+#[derive(Parser, Debug)]
+#[command(about, version = super::APP_VERSION)]
+pub struct Args {
+    /// Path to the configuration file
+    #[arg(short, long, default_value = "config.toml")]
+    pub config: PathBuf,
+    #[command(subcommand)]
+    pub command: Command,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum Command {
+    /// Collect data from whois and/or Excel files
+    Import {
+        /// Clear the import cache before running (forces a full re-fetch from RIPE Stat and whois)
+        #[arg(long)]
+        force: bool,
+        /// Import whois data only
+        #[arg(long)]
+        whois: bool,
+        /// Import xlsx data only
+        #[arg(long, conflicts_with = "asn")]
+        xlsx: bool,
+        /// ASN numbers to query (comma-separated; "AS" prefix is optional, e.g. 64496,AS64497)
+        #[arg(long, value_delimiter = ',', conflicts_with_all = ["ip", "xlsx"])]
+        asn: Option<Vec<String>>,
+        /// IP addresses or CIDR prefixes to query directly (comma-separated, e.g. 192.0.2.1,192.0.2.0/24)
+        #[arg(long, value_delimiter = ',', conflicts_with = "asn")]
+        ip: Option<Vec<String>>,
+    },
+    /// Build MMDB from scanned.jsonl via mmdbctl
+    Build {
+        /// Output MMDB file path
+        #[arg(short, long, default_value = "output.mmdb")]
+        out: PathBuf,
+        /// Source JSONL file (scanned.jsonl)
+        #[arg(short, long, default_value = "data/scanned.jsonl")]
+        input: PathBuf,
+    },
+    /// Probe CIDRs with scamper icmp-paris for demarc discovery
+    Scan {
+        /// Clear the scan cache before running (discards resume state and restarts from the beginning)
+        #[arg(long)]
+        force: bool,
+        /// Scan a single CIDR prefix instead of reading from data/whois-cidr.jsonl (e.g. 192.0.2.0/24)
+        #[arg(long)]
+        ip: Option<String>,
+        /// Scan every host in each CIDR instead of the gateway-heuristic sample (first 3 + last 3)
+        #[arg(long)]
+        full: bool,
+    },
+    /// Validate configuration and optionally scaffold sheet column mappings
+    Validate {
+        /// Read xlsx files listed in config and print [[sheets.columns]] TOML to stdout
+        #[arg(long)]
+        init_sheets: bool,
+        /// Re-apply current `ptr_patterns`/`normalize` config to `data/scanned.jsonl` and
+        /// report unique domain-matching but unmatched PTR hostnames
+        #[arg(long, conflicts_with = "init_sheets")]
+        ptr: bool,
+    },
+    /// Enrich a JSON/JSONL log file with MMDB lookup results
+    Enrich {
+        /// Input JSON or JSONL log file to enrich
+        #[arg(long)]
+        input_enrich_file: PathBuf,
+        /// Field name in each record that holds the IP address to look up
+        #[arg(long, default_value = "ip_address")]
+        input_enrich_ip: String,
+    },
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser as _;
+
+    use super::Args;
+
+    fn try_parse(args: &[&str]) -> Result<Args, clap::Error> {
+        Args::try_parse_from(args)
+    }
+
+    // --- import conflicts ---
+
+    #[test]
+    fn import_asn_conflicts_with_ip() {
+        assert!(
+            try_parse(&[
+                "prog",
+                "import",
+                "--asn",
+                "64496",
+                "--ip",
+                "198.51.100.0/24"
+            ])
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn import_asn_conflicts_with_xlsx() {
+        assert!(try_parse(&["prog", "import", "--asn", "64496", "--xlsx"]).is_err());
+    }
+
+    #[test]
+    fn import_xlsx_ip_is_valid() {
+        assert!(try_parse(&["prog", "import", "--xlsx", "--ip", "198.51.100.0/24"]).is_ok());
+    }
+
+    #[test]
+    fn import_asn_alone_is_valid() {
+        assert!(try_parse(&["prog", "import", "--asn", "64496"]).is_ok());
+    }
+
+    #[test]
+    fn import_ip_alone_is_valid() {
+        assert!(try_parse(&["prog", "import", "--ip", "198.51.100.0/24"]).is_ok());
+    }
+
+    // --- scan flags ---
+
+    #[test]
+    fn scan_enrich_only_does_not_exist() {
+        assert!(try_parse(&["prog", "scan", "--enrich-only"]).is_err());
+    }
+
+    #[test]
+    fn scan_force_ip_is_valid() {
+        assert!(try_parse(&["prog", "scan", "--force", "--ip", "198.51.100.0/24"]).is_ok());
+    }
+
+    #[test]
+    fn scan_force_full_is_valid() {
+        assert!(try_parse(&["prog", "scan", "--force", "--full"]).is_ok());
+    }
+
+    // --- validate conflicts ---
+
+    #[test]
+    fn validate_ptr_conflicts_with_init_sheets() {
+        assert!(try_parse(&["prog", "validate", "--ptr", "--init-sheets"]).is_err());
+    }
+
+    #[test]
+    fn validate_ptr_alone_is_valid() {
+        assert!(try_parse(&["prog", "validate", "--ptr"]).is_ok());
+    }
+
+    #[test]
+    fn validate_init_sheets_alone_is_valid() {
+        assert!(try_parse(&["prog", "validate", "--init-sheets"]).is_ok());
+    }
+}
