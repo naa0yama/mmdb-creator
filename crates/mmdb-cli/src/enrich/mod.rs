@@ -21,19 +21,19 @@ use mmdb_core::config::Config;
 /// read or parsed, or writing the output file fails.
 // NOTEST(io): reads MMDB + input file from filesystem, writes output file
 #[cfg_attr(coverage_nightly, coverage(off))]
-pub async fn run(config: &Config, input_file: &Path, ip_field: &str) -> Result<()> {
-    let mmdb_path = config
-        .enrich
-        .as_ref()
-        .map_or_else(|| PathBuf::from("output.mmdb"), |e| e.mmdb_path.clone());
-
+pub async fn run(
+    _config: &Config,
+    input_file: &Path,
+    ip_field: &str,
+    mmdb_path: &Path,
+) -> Result<()> {
     tracing::info!(
         mmdb = %mmdb_path.display(),
         input = %input_file.display(),
         "enrich: opening MMDB"
     );
 
-    let reader = maxminddb::Reader::open_readfile(&mmdb_path)
+    let reader = maxminddb::Reader::open_readfile(mmdb_path)
         .with_context(|| format!("failed to open MMDB {}", mmdb_path.display()))?;
 
     let raw = tokio::fs::read_to_string(input_file)

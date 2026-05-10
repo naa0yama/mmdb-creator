@@ -16,11 +16,29 @@ pub struct Config {
     pub sheets: Option<Vec<SheetConfig>>,
     /// Scan subcommand configuration.
     pub scan: Option<ScanConfig>,
-    /// Enrich subcommand configuration.
-    pub enrich: Option<EnrichConfig>,
+    /// MMDB file path shared by build, query, and enrich subcommands.
+    #[serde(default)]
+    pub mmdb: MmdbConfig,
     /// Named normalisation rule sets (`[normalize.<name>]`).
     #[serde(default)]
     pub normalize: HashMap<String, NormalizeConfig>,
+}
+
+/// MMDB path configuration shared by `mmdb build`, `mmdb query`, and `enrich`.
+#[allow(dead_code, clippy::module_name_repetitions)]
+#[derive(Debug, Deserialize)]
+pub struct MmdbConfig {
+    /// Path where `mmdb build` writes and `mmdb query`/`enrich` reads.
+    #[serde(default = "default_mmdb_path")]
+    pub path: PathBuf,
+}
+
+impl Default for MmdbConfig {
+    fn default() -> Self {
+        Self {
+            path: default_mmdb_path(),
+        }
+    }
 }
 
 /// A single regex substitution rule within a normalisation pipeline.
@@ -285,19 +303,10 @@ fn default_doh_server() -> String {
     String::from("cloudflare")
 }
 
-/// Configuration for the enrich subcommand.
-#[allow(dead_code, clippy::module_name_repetitions)]
-#[derive(Debug, Deserialize)]
-pub struct EnrichConfig {
-    /// Path to the MMDB file produced by the export subcommand (default: `"output.mmdb"`).
-    #[serde(default = "default_mmdb_path")]
-    pub mmdb_path: PathBuf,
-}
-
 // NOTEST(cfg): serde default callback — returns constant string
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn default_mmdb_path() -> PathBuf {
-    PathBuf::from("output.mmdb")
+    PathBuf::from("data/output.mmdb")
 }
 
 /// Configuration for a single Excel file import.

@@ -15,6 +15,17 @@ Rust プロジェクトのための開発テンプレート
 - Visual Studio Code
 - VS Code Dev Containers 拡張機能
 
+## 必要な外部コマンド
+
+アプリケーションの一部サブコマンドは、以下の外部コマンドが `PATH` 上に存在する必要があります。
+
+| コマンド  | 用途                                       | 使用サブコマンド | インストール                                                                                                                                     |
+| --------- | ------------------------------------------ | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `scamper` | ICMP-Paris traceroute による CIDR プローブ | `scan`           | `apt install scamper` ([CAIDA scamper](https://www.caida.org/catalog/software/scamper/))                                                         |
+| `mmdbctl` | NDJSON → `.mmdb` ファイル変換              | `mmdb build`     | `curl -Ls https://github.com/ipinfo/mmdbctl/releases/download/mmdbctl-1.4.10/deb.sh \| sh` ([ipinfo/mmdbctl](https://github.com/ipinfo/mmdbctl)) |
+
+コマンドが見つからない場合、該当サブコマンドの実行時にエラーメッセージとインストールヒントが表示されます。
+
 ## セットアップ
 
 1. リポジトリをクローン:
@@ -192,7 +203,8 @@ mise run pre-commit       # clean:sweep + fmt:check + clippy:strict + ast-grep +
 │   │   │   ├── backup.rs       # ローテーティングバックアップユーティリティ
 │   │   │   ├── cache.rs        # キャッシュ管理
 │   │   │   ├── validate.rs     # 検証サブコマンド
-│   │   │   ├── build/          # build サブコマンド
+│   │   │   ├── build/          # mmdb build サブコマンド
+│   │   │   ├── mmdb_query/     # mmdb query サブコマンド
 │   │   │   ├── enrich/         # エンリッチサブコマンド
 │   │   │   ├── import/         # インポートサブコマンド
 │   │   │   ├── scan/           # スキャンサブコマンド (thin wrapper)

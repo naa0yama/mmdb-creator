@@ -33,10 +33,10 @@ mmdb-cli enrich --input-enrich-file access.jsonl --input-enrich-ip client_ip
 
 ```toml
 [enrich]
-mmdb_path = "output.mmdb"
+mmdb_path = "data/output.mmdb"
 ```
 
-`Config` gains `pub enrich: Option<EnrichConfig>`. When absent, `mmdb_path` defaults to `"output.mmdb"`.
+`Config` gains `pub enrich: Option<EnrichConfig>`. When absent, `mmdb_path` defaults to `"data/output.mmdb"`.
 
 ---
 
@@ -59,7 +59,7 @@ Enrich {
 
 ### run() Steps
 
-1. Resolve MMDB path from `config.enrich.mmdb_path` (fallback: `"output.mmdb"`).
+1. Resolve MMDB path from `config.enrich.mmdb_path` (fallback: `"data/output.mmdb"`).
 2. Open MMDB with `maxminddb::Reader::open_readfile`.
 3. Detect input format by extension (`.jsonl` → JSONL; anything else → JSON array).
 4. Parse all records into `Vec<serde_json::Value>`.

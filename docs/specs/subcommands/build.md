@@ -1,12 +1,13 @@
-# Design: `build` Subcommand
+# Design: `mmdb build` Subcommand
 
 ## Overview
 
 `scanned.jsonl` を mmdbctl-compatible NDJSON に変換し、`mmdbctl` を呼び出して MMDB を生成する。
+`build` は `mmdb` サブコマンドグループの一部として提供される。
 
 ```bash
-mmdb-cli build --out output.mmdb
-mmdb-cli build --input data/scanned.jsonl --out output.mmdb
+mmdb-cli mmdb build
+mmdb-cli mmdb build --input data/scanned.jsonl --out data/output.mmdb
 ```
 
 ---
@@ -23,10 +24,10 @@ IPinfo の `mmdbctl` CLI を使用して MMDB ファイルを生成する:
 
 ## Output Files
 
-| File           | Purpose                                                          |
-| -------------- | ---------------------------------------------------------------- |
-| `output.jsonl` | マージ済みデータの NDJSON。diff で変更点を追跡可能。git 管理向き |
-| `output.mmdb`  | mmdbctl で生成した MMDB バイナリ                                 |
+| File                | Purpose                                                          |
+| ------------------- | ---------------------------------------------------------------- |
+| `data/output.jsonl` | マージ済みデータの NDJSON。diff で変更点を追跡可能。git 管理向き |
+| `data/output.mmdb`  | mmdbctl で生成した MMDB バイナリ                                 |
 
 JSONL を常に出力しておくことで:
 
@@ -45,8 +46,10 @@ JSONL を常に出力しておくことで:
      a. convert to MmdbRecord (field mapping table below)
      b. write JSON line to data/output.jsonl
 4. log summary: total, gateway=inservice, xlsx-matched, skipped
-5. mmdbctl import --ip 4 --size 32 -i data/output.jsonl -o <out>
+5. mmdbctl import --json --ip 4 --size 32 -i data/output.jsonl -o <out>
 ```
+
+`--json` フラグは `.jsonl` 拡張子のファイルを NDJSON として扱うために必要。
 
 Step 4 warnings (non-fatal):
 
@@ -159,23 +162,27 @@ Unknown country code → `continent` field omitted (not an error).
 
 ## mmdbctl Key Options
 
-| Flag      | Default | Note                                           |
-| --------- | ------- | ---------------------------------------------- |
-| `--ip`    | `6`     | IPv4 データなら `--ip 4` を明示                |
-| `--size`  | `32`    | Record size: 24, 28, 32                        |
-| `--merge` | `none`  | 重複時: `none` (上書き), `toplevel`, `recurse` |
+| Flag      | Default | Note                                                   |
+| --------- | ------- | ------------------------------------------------------ |
+| `--json`  | —       | `.jsonl` 拡張子ファイルを NDJSON として処理 (常に付与) |
+| `--ip`    | `6`     | IPv4 データなら `--ip 4` を明示                        |
+| `--size`  | `32`    | Record size: 24, 28, 32                                |
+| `--merge` | `none`  | 重複時: `none` (上書き), `toplevel`, `recurse`         |
 
 ---
 
 ## CLI Definition
 
+`mmdb build` は `MmdbCommand` enum の `Build` バリアントとして定義される
+(`mmdb` サブコマンドグループの詳細は `docs/specs/subcommands/mmdb.md` を参照)。
+
 ```rust
-Build {
+MmdbCommand::Build {
     /// Output MMDB file path
-    #[arg(short, long, default_value = "output.mmdb")]
+    #[arg(short, long, default_value = "data/output.mmdb")]
     out: PathBuf,
 
-    /// Source JSONL
+    /// Source JSONL file (scanned.jsonl)
     #[arg(short, long, default_value = "data/scanned.jsonl")]
     input: PathBuf,
 }
@@ -188,6 +195,5 @@ Build {
 ```
 crates/mmdb-cli/src/
   build/
-    mod.rs      # public run() entry point (replaces export/mod.rs)
-  export/       # removed
+    mod.rs      # public run() entry point
 ```

@@ -56,9 +56,10 @@ src-tauri/gen/
 
 # Data files (user-specific runtime data, not tracked)
 config.toml
-data/input/
 data/cache/
+data/input/
 data/*.jsonl
+data/*.mmdb
 
 # Keep sample xlsx tracked
 !data/exsample/

@@ -34,14 +34,10 @@ pub enum Command {
         #[arg(long, value_delimiter = ',', conflicts_with = "asn")]
         ip: Option<Vec<String>>,
     },
-    /// Build MMDB from scanned.jsonl via mmdbctl
-    Build {
-        /// Output MMDB file path
-        #[arg(short, long, default_value = "output.mmdb")]
-        out: PathBuf,
-        /// Source JSONL file (scanned.jsonl)
-        #[arg(short, long, default_value = "data/scanned.jsonl")]
-        input: PathBuf,
+    /// Build and query MMDB files
+    Mmdb {
+        #[command(subcommand)]
+        command: MmdbCommand,
     },
     /// Probe CIDRs with scamper icmp-paris for demarc discovery
     Scan {
@@ -73,6 +69,31 @@ pub enum Command {
         /// Field name in each record that holds the IP address to look up
         #[arg(long, default_value = "ip_address")]
         input_enrich_ip: String,
+        /// MMDB file to use for lookups (default: config.mmdb.path)
+        #[arg(short = 'm', long)]
+        mmdb: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum MmdbCommand {
+    /// Build MMDB from scanned.jsonl via mmdbctl
+    Build {
+        /// Output MMDB file path (default: config.mmdb.path)
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+        /// Source JSONL file (scanned.jsonl)
+        #[arg(short, long, default_value = "data/scanned.jsonl")]
+        input: PathBuf,
+    },
+    /// Look up one or more IP addresses in an MMDB file
+    #[command(alias = "q")]
+    Query {
+        /// MMDB file to query (default: config.mmdb.path)
+        #[arg(short = 'm', long)]
+        mmdb: Option<PathBuf>,
+        /// IP addresses to look up
+        ips: Vec<String>,
     },
 }
 
@@ -121,6 +142,99 @@ mod tests {
     #[test]
     fn import_ip_alone_is_valid() {
         assert!(try_parse(&["prog", "import", "--ip", "198.51.100.0/24"]).is_ok());
+    }
+
+    // --- mmdb build ---
+
+    #[test]
+    fn mmdb_build_defaults() {
+        let args = try_parse(&["prog", "mmdb", "build"]).unwrap();
+        let super::Command::Mmdb { command } = args.command else {
+            panic!("expected Mmdb");
+        };
+        let super::MmdbCommand::Build { out, input } = command else {
+            panic!("expected Build");
+        };
+        assert_eq!(out, None);
+        assert_eq!(input, std::path::PathBuf::from("data/scanned.jsonl"));
+    }
+
+    #[test]
+    fn mmdb_build_custom_paths() {
+        let args = try_parse(&[
+            "prog",
+            "mmdb",
+            "build",
+            "--out",
+            "custom.mmdb",
+            "--input",
+            "custom.jsonl",
+        ])
+        .unwrap();
+        let super::Command::Mmdb { command } = args.command else {
+            panic!("expected Mmdb");
+        };
+        let super::MmdbCommand::Build { out, input } = command else {
+            panic!("expected Build");
+        };
+        assert_eq!(out, Some(std::path::PathBuf::from("custom.mmdb")));
+        assert_eq!(input, std::path::PathBuf::from("custom.jsonl"));
+    }
+
+    // --- mmdb query ---
+
+    #[test]
+    fn mmdb_query_single_ip() {
+        let args = try_parse(&["prog", "mmdb", "query", "198.51.100.1"]).unwrap();
+        let super::Command::Mmdb { command } = args.command else {
+            panic!("expected Mmdb");
+        };
+        let super::MmdbCommand::Query { mmdb, ips } = command else {
+            panic!("expected Query");
+        };
+        assert_eq!(mmdb, None);
+        assert_eq!(ips, vec!["198.51.100.1"]);
+    }
+
+    #[test]
+    fn mmdb_query_alias_q() {
+        let args = try_parse(&["prog", "mmdb", "q", "198.51.100.1"]).unwrap();
+        let super::Command::Mmdb { command } = args.command else {
+            panic!("expected Mmdb");
+        };
+        assert!(matches!(command, super::MmdbCommand::Query { .. }));
+    }
+
+    #[test]
+    fn mmdb_query_multiple_ips() {
+        let args = try_parse(&["prog", "mmdb", "query", "198.51.100.1", "203.0.113.5"]).unwrap();
+        let super::Command::Mmdb { command } = args.command else {
+            panic!("expected Mmdb");
+        };
+        let super::MmdbCommand::Query { ips, .. } = command else {
+            panic!("expected Query");
+        };
+        assert_eq!(ips, vec!["198.51.100.1", "203.0.113.5"]);
+    }
+
+    #[test]
+    fn mmdb_query_custom_mmdb() {
+        let args = try_parse(&[
+            "prog",
+            "mmdb",
+            "query",
+            "--mmdb",
+            "other.mmdb",
+            "198.51.100.1",
+        ])
+        .unwrap();
+        let super::Command::Mmdb { command } = args.command else {
+            panic!("expected Mmdb");
+        };
+        let super::MmdbCommand::Query { mmdb, .. } = command else {
+            panic!("expected Query");
+        };
+        assert_eq!(mmdb, Some(std::path::PathBuf::from("other.mmdb")));
     }
 
     // --- scan flags ---

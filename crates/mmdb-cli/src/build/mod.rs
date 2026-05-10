@@ -66,6 +66,7 @@ pub async fn run(_config: &Config, input: &Path, output: &Path) -> Result<()> {
     let status = Command::new("mmdbctl")
         .args([
             "import",
+            "--json",
             "--ip",
             "4",
             "--size",

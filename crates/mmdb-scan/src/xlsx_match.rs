@@ -310,7 +310,7 @@ mod tests {
             whois: None,
             sheets: None,
             scan: None,
-            enrich: None,
+            mmdb: mmdb_core::config::MmdbConfig::default(),
             normalize: std::collections::HashMap::new(),
         }
     }

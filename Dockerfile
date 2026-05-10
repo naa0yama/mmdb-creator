@@ -11,6 +11,9 @@ ARG DEBIAN_FRONTEND=noninteractive \
 ## renovate: datasource=github-releases packageName=rui314/mold versioning=semver automerge=true
 ARG MOLD_VERSION=v2.41.0
 
+## renovate: datasource=github-releases packageName=ipinfo/mmdbctl versioning=semver extractVersion=^mmdbctl-(?<version>.+)$ automerge=true
+ARG MMDBCTL_VERSION=1.4.10
+
 # Rust tools
 ## renovate: datasource=github-releases packageName=mozilla/sccache versioning=semver automerge=true
 ARG SCCACHE_VERSION=v0.15.0
@@ -25,6 +28,7 @@ ARG CURL_OPTS="-sfSL --retry 3 --retry-delay 2 --retry-connrefused"
 FROM --platform=$BUILDPLATFORM rust:1.94.1-trixie@sha256:652612f07bfbbdfa3af34761c1e435094c00dde4a98036132fca28c7bb2b165c AS builder-base
 ARG CURL_OPTS \
 	DEBIAN_FRONTEND \
+	MMDBCTL_VERSION \
 	MOLD_VERSION \
 	SCCACHE_VERSION \
 	USER_NAME \
@@ -72,6 +76,10 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 	set -euxo pipefail && \
 	apt-get -y install --no-install-recommends \
 	scamper
+
+RUN echo "**** mmdbctl ****" && \
+	set -euxo pipefail && \
+	curl ${CURL_OPTS} "https://github.com/ipinfo/mmdbctl/releases/download/mmdbctl-${MMDBCTL_VERSION}/deb.sh" | sh
 
 # graft:keep-end
 

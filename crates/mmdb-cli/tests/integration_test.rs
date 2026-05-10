@@ -30,7 +30,7 @@ fn test_help_shows_subcommands() {
         .assert()
         .success()
         .stdout(predicate::str::contains("import"))
-        .stdout(predicate::str::contains("build"))
+        .stdout(predicate::str::contains("mmdb"))
         .stdout(predicate::str::contains("scan"));
 }
 
@@ -48,14 +48,37 @@ fn test_import_help() {
 
 #[test]
 #[cfg_attr(miri, ignore)]
-fn test_build_help() {
+fn test_mmdb_build_help() {
     cmd()
         .unwrap()
-        .args(["build", "--help"])
+        .args(["mmdb", "build", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("--out"))
         .stdout(predicate::str::contains("--input"));
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn test_mmdb_query_help() {
+    cmd()
+        .unwrap()
+        .args(["mmdb", "query", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--mmdb"))
+        .stdout(predicate::str::contains("IPS"));
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn test_mmdb_query_alias_q_help() {
+    cmd()
+        .unwrap()
+        .args(["mmdb", "q", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--mmdb"));
 }
 
 #[test]

@@ -15,13 +15,14 @@ ASN が広報している CIDR リストから最も細かい CIDR 単位の MMD
 
 ## Subcommands
 
-| Subcommand | Purpose                                             | Data Source                                                |
-| ---------- | --------------------------------------------------- | ---------------------------------------------------------- |
-| `import`   | データ収集 (whois + xlsx)                           | `--whois`: RIPE Stat / whois TCP 43, `--xlsx`: Excel files |
-| `build`    | 収集データを統合して MMDB を生成                    | data/*.jsonl → NDJSON → mmdbctl                            |
-| `scan`     | CIDR の demarc 探索 (scamper ICMP-Paris traceroute) | import の出力データ (data/*.jsonl)                         |
-| `validate` | config.toml の検証 / xlsx ヘッダー検査              | config.toml, xlsx files                                    |
-| `enrich`   | ログファイルに MMDB ルックアップ結果を付与          | JSON/JSONL log files + output.mmdb                         |
+| Subcommand   | Purpose                                             | Data Source                                                |
+| ------------ | --------------------------------------------------- | ---------------------------------------------------------- |
+| `import`     | データ収集 (whois + xlsx)                           | `--whois`: RIPE Stat / whois TCP 43, `--xlsx`: Excel files |
+| `mmdb build` | 収集データを統合して MMDB を生成                    | data/*.jsonl → NDJSON → mmdbctl                            |
+| `mmdb query` | MMDB ファイルで IP アドレスを検索し縦型表で表示     | data/output.mmdb (または `--mmdb` で指定)                  |
+| `scan`       | CIDR の demarc 探索 (scamper ICMP-Paris traceroute) | import の出力データ (data/*.jsonl)                         |
+| `validate`   | config.toml の検証 / xlsx ヘッダー検査              | config.toml, xlsx files                                    |
+| `enrich`     | ログファイルに MMDB ルックアップ結果を付与          | JSON/JSONL log files + data/output.mmdb                    |
 
 ## Data Flow
 
@@ -50,13 +51,20 @@ mmdb-cli scan
    v
 data/scanned.jsonl  (統合出力、enrich 済、whois + gateway + xlsx を含む)
 
-mmdb-cli build --out output.mmdb
+mmdb-cli mmdb build
    |  1. data/scanned.jsonl を読み込み
    |  2. ScanGwRecord → MmdbRecord 変換 (GeoLite2 互換フィールド名)
    |  3. NDJSON 中間ファイル data/output.jsonl を出力 (diff 確認用)
-   |  4. mmdbctl import --ip 4 --size 32 で .mmdb を生成
+   |  4. mmdbctl import --json --ip 4 --size 32 で .mmdb を生成
    v
-data/output.jsonl + output.mmdb
+data/output.jsonl + data/output.mmdb
+
+mmdb-cli mmdb query <ip>
+   |  1. data/output.mmdb を maxminddb クレートで直接読み取り
+   |  2. ネストされたフィールドをドット記法に展開
+   |  3. 縦型キー/値テーブルで stdout に表示
+   v
+stdout (縦型テーブル)
 ```
 
 ## Directory Layout
@@ -76,7 +84,8 @@ data/
   xlsx-rows.jsonl           import --xlsx の統合出力 (行データ + _source)
   scanned.jsonl             scan の最終出力 (range 集約済み ScanGwRecord、enrich 済)
   scanned.*.jsonl           上記のローテーションバックアップ
-  output.jsonl              build の中間 NDJSON (mmdbctl 入力 / diff 確認用)
+  output.jsonl              mmdb build の中間 NDJSON (mmdbctl 入力 / diff 確認用)
+  output.mmdb               mmdb build が生成した MMDB バイナリ (デフォルト: data/output.mmdb)
 ```
 
 ## Merge Strategy
@@ -136,32 +145,35 @@ mmdb-web ──► (将来)
 
 ### Migration Progress
 
-| Phase | Content                                                                 | Status  |
-| ----- | ----------------------------------------------------------------------- | ------- |
-| 1     | `mmdb-core` 抽出 (types, config, external)                              | ✅ 完了 |
-| 2     | `mmdb-whois` 抽出 (RIPE Stat + TCP 43 whois)                            | ✅ 完了 |
-| 3     | `mmdb-xlsx` 新規作成 (calamine ラッパー)                                | ✅ 完了 |
-| 3.5   | `mmdb-dns` 新規作成 (Cymru TXT + PTR)                                   | ✅ 完了 |
-| 3.6   | `build` サブコマンド実装 (ScanGwRecord → MmdbRecord + mmdbctl 呼び出し) | ✅ 完了 |
-| 4     | `mmdb-creator` → `mmdb-cli` リネーム                                    | ✅ 完了 |
-| 4.1   | `mmdb-scan` 新規作成 (scan ロジック分離)                                | ✅ 完了 |
-| 4.2   | `mmdb-whois` に import 機能追加                                         | ✅ 完了 |
-| 4.3   | `mmdb-xlsx` に import + filter + writer 追加                            | ✅ 完了 |
-| 4.4   | `mmdb-core` に build 変換追加                                           | ✅ 完了 |
-| 4.5   | `mmdb-cli` を thin client に (libs/ 削除)                               | ✅ 完了 |
-| 5     | `mmdb-web` stub 追加                                                    | 🔲 将来 |
+| Phase | Content                                                                    | Status  |
+| ----- | -------------------------------------------------------------------------- | ------- |
+| 1     | `mmdb-core` 抽出 (types, config, external)                                 | ✅ 完了 |
+| 2     | `mmdb-whois` 抽出 (RIPE Stat + TCP 43 whois)                               | ✅ 完了 |
+| 3     | `mmdb-xlsx` 新規作成 (calamine ラッパー)                                   | ✅ 完了 |
+| 3.5   | `mmdb-dns` 新規作成 (Cymru TXT + PTR)                                      | ✅ 完了 |
+| 3.6   | `build` サブコマンド実装 (ScanGwRecord → MmdbRecord + mmdbctl 呼び出し)    | ✅ 完了 |
+| 4     | `mmdb-creator` → `mmdb-cli` リネーム                                       | ✅ 完了 |
+| 4.1   | `mmdb-scan` 新規作成 (scan ロジック分離)                                   | ✅ 完了 |
+| 4.2   | `mmdb-whois` に import 機能追加                                            | ✅ 完了 |
+| 4.3   | `mmdb-xlsx` に import + filter + writer 追加                               | ✅ 完了 |
+| 4.4   | `mmdb-core` に build 変換追加                                              | ✅ 完了 |
+| 4.5   | `mmdb-cli` を thin client に (libs/ 削除)                                  | ✅ 完了 |
+| 4.6   | `build` → `mmdb build` + `mmdb query` 追加 (`mmdb` サブコマンドグループ化) | ✅ 完了 |
+| 5     | `mmdb-web` stub 追加                                                       | 🔲 将来 |
 
 ## mmdb-cli Module Layout
 
 ```
 crates/mmdb-cli/src/
 ├── main.rs              # binary entry point
-├── cli.rs               # clap subcommand definitions
+├── cli.rs               # clap subcommand definitions (Command + MmdbCommand enums)
 ├── backup.rs            # rotate_backup() — rotating JSONL backup
 ├── cache.rs             # cache::clear_dir()
 ├── validate.rs          # validate / validate --init-sheets / validate --ptr
 ├── build/
-│   └── mod.rs           # build run() — thin wrapper calling mmdb-core + mmdbctl
+│   └── mod.rs           # mmdb build run() — thin wrapper calling mmdb-core + mmdbctl
+├── mmdb_query/
+│   └── mod.rs           # mmdb query run() — maxminddb direct lookup + vertical table output
 ├── enrich/
 │   └── mod.rs           # enrich run() — JSONL log enrichment via MMDB lookup
 ├── import/

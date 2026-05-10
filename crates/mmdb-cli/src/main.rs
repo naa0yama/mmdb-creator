@@ -7,6 +7,7 @@ mod cache;
 mod cli;
 mod enrich;
 mod import;
+mod mmdb_query;
 #[cfg(unix)]
 mod scan;
 mod telemetry;
@@ -83,7 +84,7 @@ async fn main() -> anyhow::Result<()> {
     // Skip for `validate` subcommand (it runs its own full validation).
     if !matches!(
         args.command,
-        cli::Command::Validate { .. } | cli::Command::Enrich { .. } | cli::Command::Build { .. }
+        cli::Command::Validate { .. } | cli::Command::Enrich { .. } | cli::Command::Mmdb { .. }
     ) && let Some(sheets) = &config.sheets
     {
         for (idx, sheet) in sheets.iter().enumerate() {
@@ -106,7 +107,10 @@ async fn main() -> anyhow::Result<()> {
         let start = std::time::Instant::now();
         let command_name = match &args.command {
             cli::Command::Import { .. } => "import",
-            cli::Command::Build { .. } => "build",
+            cli::Command::Mmdb { command } => match command {
+                cli::MmdbCommand::Build { .. } => "mmdb:build",
+                cli::MmdbCommand::Query { .. } => "mmdb:query",
+            },
             cli::Command::Scan { .. } => "scan",
             cli::Command::Validate { .. } => "validate",
             cli::Command::Enrich { .. } => "enrich",
@@ -122,7 +126,16 @@ async fn main() -> anyhow::Result<()> {
             } => {
                 import::run(&config, force, whois, xlsx, asn, ip).await?;
             }
-            cli::Command::Build { out, input } => build::run(&config, &input, &out).await?,
+            cli::Command::Mmdb { command } => match command {
+                cli::MmdbCommand::Build { out, input } => {
+                    let out = out.unwrap_or_else(|| config.mmdb.path.clone());
+                    build::run(&config, &input, &out).await?;
+                }
+                cli::MmdbCommand::Query { mmdb, ips } => {
+                    let mmdb = mmdb.unwrap_or_else(|| config.mmdb.path.clone());
+                    mmdb_query::run(&mmdb, &ips)?;
+                }
+            },
             cli::Command::Scan { force, ip, full } => {
                 #[cfg(unix)]
                 {
@@ -162,8 +175,10 @@ async fn main() -> anyhow::Result<()> {
             cli::Command::Enrich {
                 input_enrich_file,
                 input_enrich_ip,
+                mmdb,
             } => {
-                enrich::run(&config, &input_enrich_file, &input_enrich_ip).await?;
+                let mmdb = mmdb.unwrap_or_else(|| config.mmdb.path.clone());
+                enrich::run(&config, &input_enrich_file, &input_enrich_ip, &mmdb).await?;
             }
         }
 
