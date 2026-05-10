@@ -176,7 +176,7 @@ pub async fn run(config: &Config) -> Result<()> {
             let mut matched_count = 0usize;
             for rec in &mut gw_records {
                 matcher.attach(rec);
-                if rec.xlsx.is_some() {
+                if rec.xlsx.as_ref().is_some_and(|m| !m.is_empty()) {
                     matched_count = matched_count.saturating_add(1);
                 }
             }
@@ -196,7 +196,7 @@ pub async fn run(config: &Config) -> Result<()> {
 
     // Populate derived boolean fields before writing.
     for record in &mut gw_records {
-        record.xlsx_matched = record.xlsx.is_some();
+        record.xlsx_matched = record.xlsx.as_ref().is_some_and(|m| !m.is_empty());
         record.gateway_found = record.gateway.status == "inservice";
     }
 

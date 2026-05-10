@@ -9,6 +9,7 @@ config.toml の構文・意味論的チェックと、xlsx ファイルからの
 mmdb-cli validate                # config.toml の検証
 mmdb-cli validate --init-sheets  # xlsx から [[sheets]] TOML を生成して stdout に出力
 mmdb-cli validate --ptr          # data/scanned.jsonl の PTR パターンカバレッジを診断
+mmdb-cli validate --xlsx-rows    # data/xlsx-rows.jsonl の sheettype 内重複 CIDR チェック
 ```
 
 ---
@@ -27,6 +28,13 @@ Checks performed in order:
    - `columns` have unique `name` values
    - `columns[m].name` contains only `[a-z0-9_]` (ASCII lowercase, digits, underscore)
    - `columns` have valid `col_type` values (enforced by serde)
+   - exactly one of `sheet_name` / `sheet_names` is set per column (mutually exclusive)
+   - `sheet_names` is only used with `type = "addresses"`
+   - `sheet_names` and `ptr_field` are not combined
+   - `groups` entries each have at least 2 sheet names
+   - no sheet name appears in more than one group
+   - no group sheet name is also in `excludes_sheets`
+   - every sheet name in `groups` exists as a tab in the xlsx file
 4. `[[sheets.columns]]` `ptr_field` values exist in `Config.normalize`
 5. `{name}` placeholders in `[[scan.ptr_patterns]]` exist in `Config.normalize`
 
@@ -194,6 +202,49 @@ error: data/scanned.jsonl not found — run 'scan' first
 
 ---
 
+## validate --xlsx-rows
+
+### Purpose
+
+`import --xlsx` 完了直後に重複チェックが自動実行されるが、設定変更後や手動確認時に
+`data/xlsx-rows.jsonl` を再チェックするためのコマンド。
+
+```bash
+mmdb-cli validate --xlsx-rows
+# → xlsx-rows.jsonl: no duplicate CIDRs detected (5 sheets)
+# → または Err: 重複 CIDR と出所ファイルを列挙して exit 1
+```
+
+### Check Logic
+
+| sheettype  | 重複条件                              | 結果                           |
+| ---------- | ------------------------------------- | ------------------------------ |
+| `hosting`  | 同一 CIDR を持つ行が 2 件以上         | `Err` + 重複 CIDR と出所を列挙 |
+| `backbone` | **完全一致** CIDR を持つ行が 2 件以上 | `Err` + 重複 CIDR と出所を列挙 |
+
+backbone の包含関係 (例: /19 と /20) は階層構造として正常であり重複エラーとしない。
+
+**冗長グループの免除:** `[[sheets]].groups` でグループ ID セットが交差するシート間の重複 CIDR は
+エラーとしない。シートは複数グループに同時所属可能 (overlapping groups)。グループは `config.toml`
+から読み込む (xlsx-rows.jsonl には埋め込まれない) ため、このサブコマンドは config.toml と
+xlsx-rows.jsonl の両方を参照する。
+
+### Input
+
+`data/xlsx-rows.jsonl` — `import --xlsx` が生成するファイル。存在しない場合は exit 1:
+
+```
+error: data/xlsx-rows.jsonl not found — run 'import --xlsx' first
+```
+
+### Output (success)
+
+```
+xlsx-rows.jsonl: no duplicate CIDRs detected (5 sheets)
+```
+
+---
+
 ## Implementation
 
 ### Module
@@ -274,7 +325,10 @@ Validate {
     /// and report unique domain-matching but unmatched PTR hostnames
     #[arg(long, conflicts_with = "init_sheets")]
     ptr: bool,
+    /// Check xlsx-rows.jsonl for duplicate CIDRs within the same sheettype
+    #[arg(long, conflicts_with = "init_sheets", conflicts_with = "ptr")]
+    xlsx_rows: bool,
 },
 ```
 
-`--ptr` と `--init-sheets` は相互排他。Clap がパース時点でエラーとして拒否する。
+`--ptr`, `--init-sheets`, `--xlsx-rows` は互いに排他。Clap がパース時点でエラーとして拒否する。

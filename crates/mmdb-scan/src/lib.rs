@@ -128,9 +128,22 @@ async fn scan_loop(
     let total_remaining = remaining.len();
     let start_time = std::time::Instant::now();
 
-    // Build a lookup: destination IP → parent CIDR.
-    let cidr_by_ip: std::collections::HashMap<std::net::IpAddr, IpNet> =
-        all_targets.iter().map(|(cidr, ip)| (*ip, *cidr)).collect();
+    // Build a lookup: destination IP → parent CIDR, preferring the most specific
+    // (longest-prefix) CIDR when the same IP appears in both whois and xlsx targets.
+    // Hosting xlsx rows contribute /32 entries that must win over whois /24 entries
+    // so that hosting exact-CIDR matching works correctly in the enrich phase.
+    let mut cidr_by_ip: std::collections::HashMap<std::net::IpAddr, IpNet> =
+        std::collections::HashMap::new();
+    for (cidr, ip) in all_targets {
+        cidr_by_ip
+            .entry(*ip)
+            .and_modify(|existing| {
+                if cidr.prefix_len() > existing.prefix_len() {
+                    *existing = *cidr;
+                }
+            })
+            .or_insert(*cidr);
+    }
 
     let window = cfg.window;
     let probes = cfg.probes;

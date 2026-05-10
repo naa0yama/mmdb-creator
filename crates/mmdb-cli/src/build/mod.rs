@@ -86,7 +86,7 @@ pub async fn run(_config: &Config, input: &Path, output: &Path) -> Result<()> {
             "--size",
             "32",
             "--fields",
-            "continent,country,autonomous_system_number,autonomous_system_organization,whois,gateway,operational,xlsx_matched,gateway_found",
+            "continent,country,autonomous_system_number,autonomous_system_organization,whois,gateway,xlsx,xlsx_matched,gateway_found",
             "-i",
             out_jsonl
                 .to_str()

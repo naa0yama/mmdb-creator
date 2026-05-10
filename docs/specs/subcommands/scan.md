@@ -168,7 +168,7 @@ TUI 上で "Skipped (cached): N" として表示する。
 3. DNS reverse lookup で PTR を一括解決
 4. xlsx 行を各 `ScanGwRecord` に付加 (PTR マッチまたは CIDR 包含で選択)
 5. 派生フラグを全レコードに設定してから `data/scanned.jsonl` に書き込む:
-   - `xlsx_matched = xlsx.is_some()`
+   - `xlsx_matched = xlsx.as_ref().is_some_and(|m| !m.is_empty())`
    - `gateway_found = gateway.status == "inservice"`
 
 ### PTR Progress Logging
@@ -238,10 +238,17 @@ Walk hops from last to first. For each hop:
 	"whois_source": "APNIC",
 	"whois_last_modified": "2025-01-15T00:00:00Z",
 	"xlsx": {
-		"_source": { "file": "IPAM.xlsx", "sheet": "border1.ty1", "row_index": 3 },
-		"host": "border1",
-		"port": "xe-0/0/1",
-		"serviceid": "SVC-001"
+		"backbone": {
+			"_source": {
+				"file": "IPAM.xlsx",
+				"sheet": "border1.ty1",
+				"row_index": 3,
+				"sheettype": "backbone"
+			},
+			"host": "border1",
+			"port": "xe-0/0/1",
+			"serviceid": "SVC-001"
+		}
 	},
 	"xlsx_matched": true,
 	"gateway_found": true,
@@ -252,8 +259,8 @@ Walk hops from last to first. For each hop:
 - `gateway` object: always present (never null); all fields serialised unconditionally.
 - `host_ip`, `host_ptr`: `#[serde(skip)]` — reserved for future host-analysis phase.
 - `inetnum`, `country`, `whois_source`, `whois_last_modified`: joined from whois-cidr.jsonl via LPM at GW-resolution time.
-- `xlsx`: matched xlsx row attached during enrich phase; absent when no match.
-- `xlsx_matched`: `true` when an xlsx row was matched (`xlsx.is_some()`); `false` otherwise.
+- `xlsx`: sheettype-keyed map (`"backbone"` / `"hosting"`) of matched xlsx rows; each entry contains `_source` metadata and column values. Absent when no match for any sheettype.
+- `xlsx_matched`: `true` when at least one sheettype matched (`xlsx` map is non-empty); `false` otherwise.
 - `gateway_found`: `true` when gateway resolution fully succeeded (`gateway.status == "inservice"`); `false` otherwise.
 
 ---
@@ -332,25 +339,40 @@ regex = "{interface}.{device}.{facility}"
 
 enrich フェーズで `xlsx-rows.jsonl` を読み込み、各 `ScanGwRecord` に xlsx 行を付加する。
 
-**Index structures** (built once at enrich startup):
+**Index structures** (built once at enrich startup, separated by sheettype):
 
 ```
-ptr_candidates: Vec<XlsxRow>        // rows with ≥1 ptr_field column
-cidr_candidates: Vec<(IpNet, XlsxRow)>  // one entry per IpNet per row
+backbone_ptr_candidates:  Vec<PtrCandidate>   // backbone rows with ≥1 ptr_field column
+backbone_cidr_candidates: Vec<CidrCandidate>  // backbone rows, one entry per IpNet
+hosting_cidr_candidates:  Vec<CidrCandidate>  // hosting rows, one entry per IpNet (exact-only)
 ```
 
 **Match algorithm per ScanGwRecord:**
 
+Backbone and hosting matches are independent; both run for every record.
+
+_Backbone match:_
+
 1. If gateway PTR was parsed by `ptr_patterns`:
-   - For each `ptr_candidate`, normalize each `ptr_field` column value
+   - For each `backbone_ptr_candidate`, normalize each `ptr_field` column value
      (warn if no normalize rule), normalize the corresponding PTR capture group value, compare.
    - All `ptr_field` columns must match (AND condition).
    - First matching row used; multiple matches → warn + use first.
 2. If no PTR match:
-   - For each `cidr_candidate`, check `xlsx_net.contains(&range_net)` or `xlsx_net == range_net`.
+   - For each `backbone_cidr_candidate`, check bidirectional containment:
+     `xlsx_net.contains(&range_net)` OR `range_net.contains(&xlsx_net)`.
    - First matching entry used; multiple matches → warn + use first.
-3. On any match: attach full matched row JSON as `xlsx` in `ScanGwRecord`.
-4. No match → `xlsx` field absent.
+
+_Hosting match (exact CIDR only; no PTR matching):_
+
+3. For each `hosting_cidr_candidate`, check `xlsx_net == range_net` (exact equality).
+   - First matching entry used; multiple matches → warn + use first.
+
+_Attach:_
+
+4. Each match is stored under its sheettype key: `ScanGwRecord.xlsx["backbone"]` /
+   `ScanGwRecord.xlsx["hosting"]`. Unmatched sheettypes are omitted.
+5. If neither backbone nor hosting matched → `xlsx` field absent.
 
 **Normalization semantics:**
 

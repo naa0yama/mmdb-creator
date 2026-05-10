@@ -231,6 +231,7 @@ pub struct SheetResult {
     pub last_modified: Option<String>,
     pub rows: Vec<XlsxRow>,
     pub skipped_count: usize,
+    pub sheettype: SheetType,
 }
 
 /// Read all matching sheets from an xlsx file.
@@ -242,12 +243,12 @@ pub fn inspect_sheets(config: &SheetConfig) -> Result<Vec<SheetInfo>>;
 
 #### Column Type Semantics
 
-| `ColumnType` | `CellValue` variant     | Conversion rules                                                                         |
-| ------------ | ----------------------- | ---------------------------------------------------------------------------------------- |
-| `String`     | `String(s)`             | Cell text as-is, trimmed                                                                 |
-| `Integer`    | `Integer(i64)`          | `Data::Int` → direct; `Data::Float` → truncate; `Data::String` → parse                   |
-| `Bool`       | `Bool(b)`               | `Data::Bool` → direct; `"true"`/`"1"` → true; `"false"`/`"0"` → false (case-insensitive) |
-| `Addresses`  | `Addresses(Vec<IpNet>)` | Normalization pipeline (see below)                                                       |
+| `ColumnType` | `CellValue` variant     | Conversion rules                                                                                     |
+| ------------ | ----------------------- | ---------------------------------------------------------------------------------------------------- |
+| `String`     | `String(s)`             | Cell text as-is, trimmed                                                                             |
+| `Integer`    | `Integer(i64)`          | `Data::Int` → direct; `Data::Float` → truncate; `Data::String` → parse                               |
+| `Bool`       | `Bool(b)`               | `Data::Bool` → direct; `"true"`/`"1"` → true; `"false"`/`"0"` → false (case-insensitive)             |
+| `Addresses`  | `Addresses(Vec<IpNet>)` | Normalization pipeline (see below); empty cell or absent header → key omitted from output (not `[]`) |
 
 #### Address Normalization Pipeline
 
@@ -267,11 +268,44 @@ Invalid tokens emit a warning but do not fail the cell.
 IP range decomposition (`range_to_cidrs`): operates on `u128` for both IPv4 and IPv6;
 finds the largest prefix where current address is the network address and broadcast ≤ end.
 
+#### Multi-Column Aggregation (`sheet_names`)
+
+When `sheet_names` (plural) is set on a `[[sheets.columns]]` entry instead of
+`sheet_name`, all listed columns are merged into a single `Addresses` output field:
+
+```toml
+[[sheets.columns]]
+name = "lan_addresses"
+sheet_names = ["LAN Address 1", "LAN Address 2", "LAN Address 3"]
+type = "addresses"
+```
+
+Rules:
+
+- Only valid for `type = "addresses"`.
+- Cannot be combined with `ptr_field`.
+- Addresses from all listed columns are concatenated and deduplicated at
+  CIDR level (exact prefix equality, insertion order preserved).
+- Absent headers and empty cells are skipped silently (same as single-column).
+- If all columns are empty or absent the output key is omitted entirely.
+- `sheet_name` and `sheet_names` are mutually exclusive; exactly one must be set.
+
 #### Header Row Handling
 
 `SheetConfig.header_row` is 1-indexed. Data rows start at `header_row` (0-indexed).
-Builds `HashMap<String, usize>` from header row. Missing column → `tracing::warn!`,
-field set to `CellValue::String("")`.
+Builds `HashMap<String, usize>` from header row.
+
+Missing column behavior depends on column type:
+
+| Column type | Missing header behavior                                        |
+| ----------- | -------------------------------------------------------------- |
+| `Addresses` | Key omitted silently (no warning, no fallback value)           |
+| All others  | `tracing::warn!` emitted; field set to `CellValue::String("")` |
+
+The `Addresses` silent-omit rule exists because address columns are often
+sparse across sheets (e.g. `lan_address_50`–`lan_address_100` may not all
+appear in every sheet) and an absent header should not produce spurious empty
+entries in the output.
 
 #### Error Handling
 
@@ -290,6 +324,11 @@ field set to `CellValue::String("")`.
 filename = "data/input/IPAM.xlsx"
 header_row = 3
 excludes_sheets = ["Power"]
+sheettype = "backbone" # "backbone" (default) or "hosting"
+# groups: sheet tab names whose duplicate CIDRs are permitted with each other.
+# Each inner list is one redundancy group; a sheet may appear in multiple groups
+# (overlapping groups). Two sheets are exempt when their group-ID sets intersect.
+# groups = [["border1.ty1", "border1.ty2"], ["core1", "core2"]]
 
 [[sheets.columns]]
 name = "host"
@@ -323,7 +362,12 @@ One JSON object per xlsx row:
 
 ```json
 {
-	"_source": { "file": "IPAM.xlsx", "sheet": "border1.ty1", "row_index": 3 },
+	"_source": {
+		"file": "IPAM.xlsx",
+		"sheet": "border1.ty1",
+		"row_index": 3,
+		"sheettype": "backbone"
+	},
 	"host": "border1",
 	"site": "ty1",
 	"port": "xe-0/0/1",
@@ -333,7 +377,7 @@ One JSON object per xlsx row:
 ```
 
 - `_source`: provenance metadata (file, sheet, row_index)
-- `addresses`-type columns: serialised as arrays of CIDR strings
+- `addresses`-type columns: serialised as arrays of CIDR strings; empty columns are omitted (key absent, not `[]`)
 - Raw xlsx values stored; normalization applied at scan enrich match time
 - File is overwritten on each run; rotating backup applied (max 5 generations)
 

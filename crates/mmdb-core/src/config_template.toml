@@ -67,6 +67,14 @@ cache_dir = "data/cache/import"
 # name = "serviceid"
 # sheet_name = "ServiceID"
 # type = "string"           # no ptr_field = payload-only column
+#
+# # Aggregate multiple address columns into one field (type = "addresses" only).
+# # All listed columns are merged and deduplicated at CIDR level.
+# # sheet_names and sheet_name are mutually exclusive.
+# [[sheets.columns]]
+# name = "lan_addresses"
+# sheet_names = ["LAN Address 1", "LAN Address 2", "LAN Address 3"]
+# type = "addresses"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Scan

@@ -1,6 +1,6 @@
 //! Validate subcommand: config validation and sheet scaffolding.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::io::{BufRead as _, BufReader};
 use std::path::Path;
 
@@ -19,6 +19,9 @@ use mmdb_scan::ptr_parse::{self, CompiledPattern};
 /// - each `sheets[n].header_row >= 1`
 /// - column names within each sheet are unique
 /// - each `sheets[n].columns[m].name` contains only `[a-z0-9_]`
+/// - exactly one of `sheet_name` / `sheet_names` is set per column
+/// - `sheet_names` is only used with `type = "addresses"`
+/// - `sheet_names` and `ptr_field` are not combined
 /// - each `sheets[n].columns[m].ptr_field` references a key in `normalize`
 /// - each `normalize.<name>.rules[k].pattern` is a valid regex
 /// - each `{name}` placeholder in `scan.ptr_patterns[k].regex` exists in `normalize`
@@ -41,11 +44,9 @@ fn collect_config_errors(config: &Config) -> Vec<String> {
                     sheet.filename.display()
                 ));
             }
-
             if sheet.header_row < 1 {
                 errors.push(format!("sheets[{idx}].header_row must be >= 1"));
             }
-
             let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
             for col in &sheet.columns {
                 if !seen.insert(col.name.as_str()) {
@@ -54,22 +55,9 @@ fn collect_config_errors(config: &Config) -> Vec<String> {
                         col.name
                     ));
                 }
-                if !col.name.chars().all(is_snake_case_char) {
-                    errors.push(format!(
-                        "sheets[{idx}].columns '{}': name must contain only [a-z0-9_]",
-                        col.name
-                    ));
-                }
-                if let Some(ref ptr_field) = col.ptr_field
-                    && !config.normalize.contains_key(ptr_field.as_str())
-                {
-                    errors.push(format!(
-                        "sheets[{idx}].columns '{}': ptr_field '{ptr_field}' has no \
-                         corresponding [normalize.{ptr_field}] section",
-                        col.name
-                    ));
-                }
+                validate_column(col, idx, config, &mut errors);
             }
+            validate_groups(sheet, idx, &mut errors);
         }
     }
 
@@ -115,6 +103,91 @@ fn collect_config_errors(config: &Config) -> Vec<String> {
     }
 
     errors
+}
+
+/// Validate `groups` in a [`SheetConfig`] and push any errors into `out`.
+///
+/// Checks:
+/// - each group has at least 2 sheet names
+/// - no sheet name appears in more than one group
+/// - no group sheet name is also in `excludes_sheets`
+fn validate_groups(sheet: &mmdb_core::config::SheetConfig, idx: usize, out: &mut Vec<String>) {
+    let mut membership: HashSet<&str> = HashSet::new();
+    for (gidx, group) in sheet.groups.iter().enumerate() {
+        if group.len() < 2 {
+            out.push(format!(
+                "sheets[{idx}].groups[{gidx}]: group must have at least 2 sheet names"
+            ));
+        }
+        for name in group {
+            if sheet.excludes_sheets.iter().any(|e| e == name) {
+                out.push(format!(
+                    "sheets[{idx}].groups[{gidx}]: '{name}' is also in excludes_sheets"
+                ));
+            }
+            if !membership.insert(name.as_str()) {
+                out.push(format!(
+                    "sheets[{idx}].groups: '{name}' appears in multiple groups"
+                ));
+            }
+        }
+    }
+}
+
+/// Validate a single [`ColumnMapping`] and push any errors into `out`.
+fn validate_column(
+    col: &mmdb_core::config::ColumnMapping,
+    idx: usize,
+    config: &Config,
+    out: &mut Vec<String>,
+) {
+    if !col.name.chars().all(is_snake_case_char) {
+        out.push(format!(
+            "sheets[{idx}].columns '{}': name must contain only [a-z0-9_]",
+            col.name
+        ));
+    }
+    match (&col.sheet_name, &col.sheet_names) {
+        (Some(_), Some(_)) => {
+            out.push(format!(
+                "sheets[{idx}].columns '{}': sheet_name and sheet_names cannot both be set",
+                col.name
+            ));
+        }
+        (None, None) => {
+            out.push(format!(
+                "sheets[{idx}].columns '{}': \
+                 exactly one of sheet_name or sheet_names must be set",
+                col.name
+            ));
+        }
+        _ => {}
+    }
+    if col.sheet_names.is_some()
+        && !matches!(col.col_type, mmdb_core::config::ColumnType::Addresses)
+    {
+        out.push(format!(
+            "sheets[{idx}].columns '{}': \
+             sheet_names is only allowed with type = \"addresses\"",
+            col.name
+        ));
+    }
+    if col.sheet_names.is_some() && col.ptr_field.is_some() {
+        out.push(format!(
+            "sheets[{idx}].columns '{}': ptr_field cannot be combined with sheet_names",
+            col.name
+        ));
+    }
+    if col.sheet_names.is_none()
+        && let Some(ref ptr_field) = col.ptr_field
+        && !config.normalize.contains_key(ptr_field.as_str())
+    {
+        out.push(format!(
+            "sheets[{idx}].columns '{}': ptr_field '{ptr_field}' has no \
+             corresponding [normalize.{ptr_field}] section",
+            col.name
+        ));
+    }
 }
 
 /// Extract all `{name}` placeholder names from a regex string.
@@ -254,6 +327,120 @@ fn filter_unmatched_ptrs(
 
 /// Run config validation and optionally emit an `--init-sheets` TOML scaffold.
 ///
+/// Validate `xlsx-rows.jsonl` for duplicate CIDRs within the same sheettype.
+///
+/// Reads the JSONL file, reconstructs `SheetResult`-like data from `_source` metadata,
+/// and delegates to `mmdb_xlsx::import::validate_no_duplicate_cidrs`.
+///
+/// # Errors
+///
+/// Returns an error if the file cannot be read, or if duplicate CIDRs are found.
+// NOTEST(io): reads xlsx-rows.jsonl from filesystem and writes to stdout
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[allow(clippy::print_stdout)]
+pub fn run_xlsx_rows(xlsx_rows_path: &Path, config: &Config) -> Result<()> {
+    use indexmap::IndexMap;
+    use ipnet::IpNet;
+    use mmdb_core::config::SheetType;
+    use mmdb_xlsx::reader::{CellValue, SheetResult, XlsxRow};
+
+    let raw = std::fs::read_to_string(xlsx_rows_path).with_context(|| {
+        format!(
+            "{} not found — run 'import --xlsx' first",
+            xlsx_rows_path.display()
+        )
+    })?;
+
+    // Group rows back into SheetResult by (file, sheet, sheettype).
+    let mut sheet_map: std::collections::HashMap<(String, String, SheetType), Vec<XlsxRow>> =
+        std::collections::HashMap::new();
+
+    for (lineno, line) in raw.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let Ok(val) = serde_json::from_str::<serde_json::Value>(line) else {
+            tracing::warn!(
+                line = lineno.saturating_add(1),
+                "xlsx-rows.jsonl: skipping unparseable line"
+            );
+            continue;
+        };
+        let Some(obj) = val.as_object() else { continue };
+        let src = obj.get("_source").and_then(|v| v.as_object());
+        let file = src
+            .and_then(|s| s.get("file"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_owned();
+        let sheet = src
+            .and_then(|s| s.get("sheet"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_owned();
+        let sheettype_str = src
+            .and_then(|s| s.get("sheettype"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("backbone");
+        let sheettype = if sheettype_str == "hosting" {
+            SheetType::Hosting
+        } else {
+            SheetType::Backbone
+        };
+        #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
+        let row_index = src
+            .and_then(|s| s.get("row_index"))
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0) as usize;
+
+        let nets: Vec<IpNet> = obj
+            .iter()
+            .filter(|(k, _)| k.as_str() != "_source")
+            .filter_map(|(_, v)| v.as_array())
+            .flatten()
+            .filter_map(|item| item.as_str()?.parse::<IpNet>().ok())
+            .collect();
+
+        if !nets.is_empty() {
+            let mut fields = IndexMap::new();
+            fields.insert("network".to_owned(), CellValue::Addresses(nets));
+            sheet_map
+                .entry((file, sheet, sheettype))
+                .or_default()
+                .push(XlsxRow { row_index, fields });
+        }
+    }
+
+    let results: Vec<SheetResult> = sheet_map
+        .into_iter()
+        .map(|((filename, sheetname, sheettype), rows)| SheetResult {
+            filename,
+            sheetname,
+            last_modified: None,
+            rows,
+            skipped_count: 0,
+            sheettype,
+        })
+        .collect();
+
+    let group_lookup = if let Some(sheets) = config.sheets.as_deref() {
+        mmdb_xlsx::import::build_group_lookup(sheets, &results)?
+    } else {
+        HashMap::new()
+    };
+
+    match mmdb_xlsx::import::validate_no_duplicate_cidrs(&results, &group_lookup) {
+        Ok(()) => {
+            println!(
+                "xlsx-rows.jsonl: no duplicate CIDRs detected ({} sheets)",
+                results.len()
+            );
+            Ok(())
+        }
+        Err(e) => Err(e),
+    }
+}
+
 /// # Errors
 ///
 /// Returns an error if the config fails validation (missing files, bad `header_row`,
@@ -273,6 +460,10 @@ pub fn run(config: &Config, init_sheets: bool) -> Result<()> {
     }
 
     tracing::info!("config validation passed");
+
+    // Verify that every sheet name referenced in groups actually exists in the xlsx.
+    validate_group_sheet_names(config)?;
+
     println!("✓ config is valid");
 
     if init_sheets {
@@ -280,6 +471,57 @@ pub fn run(config: &Config, init_sheets: bool) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Check that every sheet name in `groups` exists as a tab in the xlsx file.
+///
+/// Uses `inspect_sheets` to open each xlsx file. I/O errors are warned and
+/// skipped rather than failing, since the file-existence check already runs
+/// in `collect_config_errors`.
+///
+/// # Errors
+///
+/// Returns an error listing all group sheet names that are absent from the xlsx.
+// NOTEST(io): opens xlsx files via inspect_sheets
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn validate_group_sheet_names(config: &Config) -> Result<()> {
+    let Some(sheets) = config.sheets.as_deref() else {
+        return Ok(());
+    };
+    let mut errors: Vec<String> = Vec::new();
+
+    for sheet_config in sheets {
+        if sheet_config.groups.is_empty() {
+            continue;
+        }
+        let available = match mmdb_xlsx::inspect_sheets(sheet_config, false) {
+            Ok(infos) => infos.into_iter().map(|s| s.name).collect::<HashSet<_>>(),
+            Err(e) => {
+                tracing::warn!(
+                    filename = %sheet_config.filename.display(),
+                    error = %e,
+                    "groups validation: failed to inspect sheets; skipping"
+                );
+                continue;
+            }
+        };
+        for (gidx, group) in sheet_config.groups.iter().enumerate() {
+            for name in group {
+                if !available.contains(name) {
+                    errors.push(format!(
+                        "sheets[*].groups[{gidx}]: '{name}' not found in '{}'",
+                        sheet_config.filename.display()
+                    ));
+                }
+            }
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        anyhow::bail!("config validation failed:\n  {}", errors.join("\n  "))
+    }
 }
 
 /// Emit a TOML scaffold for all `[[sheets]]` entries to stdout.
@@ -472,13 +714,16 @@ mod tests {
             header_row,
             excludes_sheets: vec![],
             columns: vec![],
+            sheettype: mmdb_core::config::SheetType::Backbone,
+            groups: vec![],
         }
     }
 
     fn col(name: &str) -> ColumnMapping {
         ColumnMapping {
             name: name.to_owned(),
-            sheet_name: name.to_owned(),
+            sheet_name: Some(name.to_owned()),
+            sheet_names: None,
             col_type: ColumnType::String,
             ptr_field: None,
         }
@@ -657,6 +902,127 @@ mod tests {
         };
         let errors = collect_config_errors(&cfg);
         assert_eq!(errors.len(), 3, "expected 3 errors, got {errors:?}");
+    }
+
+    // ── sheet_name / sheet_names validation ──────────────────────────────────
+
+    fn addr_col_multi(name: &str, sheet_names: &[&str]) -> ColumnMapping {
+        ColumnMapping {
+            name: name.to_owned(),
+            sheet_name: None,
+            sheet_names: Some(sheet_names.iter().map(|s| (*s).to_owned()).collect()),
+            col_type: ColumnType::Addresses,
+            ptr_field: None,
+        }
+    }
+
+    #[test]
+    fn both_sheet_name_and_sheet_names_is_error() {
+        let col = ColumnMapping {
+            name: "addr".to_owned(),
+            sheet_name: Some("Addr".to_owned()),
+            sheet_names: Some(vec!["Addr1".to_owned()]),
+            col_type: ColumnType::Addresses,
+            ptr_field: None,
+        };
+        let cfg = Config {
+            sheets: Some(vec![SheetConfig {
+                columns: vec![col],
+                ..sheet(".", 1)
+            }]),
+            ..base_config()
+        };
+        let errors = collect_config_errors(&cfg);
+        assert!(
+            errors.iter().any(|e| e.contains("cannot both be set")),
+            "expected both-set error in {errors:?}"
+        );
+    }
+
+    #[test]
+    fn neither_sheet_name_nor_sheet_names_is_error() {
+        let col = ColumnMapping {
+            name: "addr".to_owned(),
+            sheet_name: None,
+            sheet_names: None,
+            col_type: ColumnType::Addresses,
+            ptr_field: None,
+        };
+        let cfg = Config {
+            sheets: Some(vec![SheetConfig {
+                columns: vec![col],
+                ..sheet(".", 1)
+            }]),
+            ..base_config()
+        };
+        let errors = collect_config_errors(&cfg);
+        assert!(
+            errors.iter().any(|e| e.contains("exactly one")),
+            "expected exactly-one error in {errors:?}"
+        );
+    }
+
+    #[test]
+    fn sheet_names_with_string_type_is_error() {
+        let col = ColumnMapping {
+            name: "site".to_owned(),
+            sheet_name: None,
+            sheet_names: Some(vec!["Site1".to_owned()]),
+            col_type: ColumnType::String,
+            ptr_field: None,
+        };
+        let cfg = Config {
+            sheets: Some(vec![SheetConfig {
+                columns: vec![col],
+                ..sheet(".", 1)
+            }]),
+            ..base_config()
+        };
+        let errors = collect_config_errors(&cfg);
+        assert!(
+            errors.iter().any(|e| e.contains("only allowed with type")),
+            "expected type-restriction error in {errors:?}"
+        );
+    }
+
+    #[test]
+    fn sheet_names_with_ptr_field_is_error() {
+        let col = ColumnMapping {
+            name: "addr".to_owned(),
+            sheet_name: None,
+            sheet_names: Some(vec!["Addr1".to_owned()]),
+            col_type: ColumnType::Addresses,
+            ptr_field: Some("facility".to_owned()),
+        };
+        let cfg = Config {
+            sheets: Some(vec![SheetConfig {
+                columns: vec![col],
+                ..sheet(".", 1)
+            }]),
+            ..base_config()
+        };
+        let errors = collect_config_errors(&cfg);
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("ptr_field cannot be combined")),
+            "expected ptr_field error in {errors:?}"
+        );
+    }
+
+    #[test]
+    fn sheet_names_with_addresses_type_is_valid() {
+        let cfg = Config {
+            sheets: Some(vec![SheetConfig {
+                columns: vec![addr_col_multi("addrs", &["Addr1", "Addr2"])],
+                ..sheet(".", 1)
+            }]),
+            ..base_config()
+        };
+        assert!(
+            collect_config_errors(&cfg).is_empty(),
+            "sheet_names + Addresses should be valid"
+        );
     }
 
     // ── normalize validation ──────────────────────────────────────────────────
@@ -1048,6 +1414,100 @@ mod tests {
             // Fails regex → reported
             let result = filter_unmatched_ptrs(&ptrs(&["other.net"]), &patterns, &norm);
             assert_eq!(result, vec!["other.net"]);
+        }
+    }
+
+    // ── validate_groups ───────────────────────────────────────────────────────
+
+    mod groups {
+        use std::path::PathBuf;
+
+        use mmdb_core::config::{Config, SheetConfig};
+
+        use super::super::collect_config_errors;
+
+        fn base_config() -> Config {
+            Config {
+                whois: None,
+                sheets: None,
+                scan: None,
+                mmdb: mmdb_core::config::MmdbConfig::default(),
+                normalize: std::collections::HashMap::new(),
+            }
+        }
+
+        fn sheet_with_groups(groups: Vec<Vec<String>>) -> SheetConfig {
+            SheetConfig {
+                // Use a path that always exists so the file-existence check passes.
+                filename: PathBuf::from("."),
+                header_row: 1,
+                excludes_sheets: vec![],
+                columns: vec![],
+                sheettype: mmdb_core::config::SheetType::Backbone,
+                groups,
+            }
+        }
+
+        #[test]
+        fn valid_groups_no_error() {
+            let cfg = Config {
+                sheets: Some(vec![sheet_with_groups(vec![vec![
+                    "border1.ty1".to_owned(),
+                    "border1.ty2".to_owned(),
+                ]])]),
+                ..base_config()
+            };
+            let errors = collect_config_errors(&cfg);
+            assert!(errors.is_empty(), "unexpected errors: {errors:?}");
+        }
+
+        #[test]
+        fn group_single_sheet_is_error() {
+            let cfg = Config {
+                sheets: Some(vec![sheet_with_groups(vec![vec![
+                    "border1.ty1".to_owned(),
+                ]])]),
+                ..base_config()
+            };
+            let errors = collect_config_errors(&cfg);
+            assert!(
+                errors.iter().any(|e| e.contains("at least 2")),
+                "expected 'at least 2' error, got: {errors:?}"
+            );
+        }
+
+        #[test]
+        fn group_sheet_in_excludes_is_error() {
+            let mut s = sheet_with_groups(vec![vec![
+                "border1.ty1".to_owned(),
+                "border1.ty2".to_owned(),
+            ]]);
+            s.excludes_sheets = vec!["border1.ty1".to_owned()];
+            let cfg = Config {
+                sheets: Some(vec![s]),
+                ..base_config()
+            };
+            let errors = collect_config_errors(&cfg);
+            assert!(
+                errors.iter().any(|e| e.contains("excludes_sheets")),
+                "expected excludes_sheets error, got: {errors:?}"
+            );
+        }
+
+        #[test]
+        fn group_multi_membership_is_error() {
+            let cfg = Config {
+                sheets: Some(vec![sheet_with_groups(vec![
+                    vec!["border1.ty1".to_owned(), "border1.ty2".to_owned()],
+                    vec!["border1.ty2".to_owned(), "core1".to_owned()],
+                ])]),
+                ..base_config()
+            };
+            let errors = collect_config_errors(&cfg);
+            assert!(
+                errors.iter().any(|e| e.contains("multiple groups")),
+                "expected 'multiple groups' error, got: {errors:?}"
+            );
         }
     }
 }

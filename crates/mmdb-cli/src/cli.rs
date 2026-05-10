@@ -60,6 +60,9 @@ pub enum Command {
         /// report unique domain-matching but unmatched PTR hostnames
         #[arg(long, conflicts_with = "init_sheets")]
         ptr: bool,
+        /// Check xlsx-rows.jsonl for duplicate CIDRs within the same sheettype
+        #[arg(long, conflicts_with = "init_sheets", conflicts_with = "ptr")]
+        xlsx_rows: bool,
     },
     /// Enrich a JSON/JSONL log file with MMDB lookup results
     Enrich {

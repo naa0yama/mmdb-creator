@@ -25,9 +25,9 @@ pub struct MmdbRecord {
     /// Gateway device that serves this prefix, identified via PTR patterns.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gateway: Option<GatewayExport>,
-    /// Data sourced from Excel (.xlsx) files.
+    /// Data sourced from Excel (.xlsx) files, keyed by sheettype ("backbone"/"hosting").
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub operational: Option<OperationalData>,
+    pub xlsx: Option<std::collections::HashMap<String, OperationalData>>,
     /// True when this record matched an xlsx row.
     pub xlsx_matched: bool,
     /// True when a gateway was successfully resolved.
@@ -275,9 +275,9 @@ pub struct ScanGwRecord {
     /// Timestamp of the earliest trace in this range (ISO 8601 UTC).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub measured_at: Option<String>,
-    /// xlsx row matched via PTR fields or CIDR lookup; absent when no match.
+    /// xlsx rows matched per sheettype ("backbone"/"hosting"); absent when no match.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub xlsx: Option<serde_json::Value>,
+    pub xlsx: Option<std::collections::HashMap<String, serde_json::Value>>,
     /// True when this record matched an xlsx row.
     #[serde(default)]
     pub xlsx_matched: bool,

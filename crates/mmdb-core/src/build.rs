@@ -1,5 +1,7 @@
 //! Build conversion utilities: scan records to MMDB format.
 
+use std::collections::HashMap;
+
 use crate::types::{
     Continent, Country, GatewayExport, MmdbRecord, OperationalData, ScanGwRecord, WhoisExport,
 };
@@ -22,7 +24,7 @@ pub fn to_mmdb_record(rec: &ScanGwRecord) -> MmdbRecord {
 
     let whois = build_whois_export(rec);
     let gateway = build_gateway_export(rec);
-    let operational = build_operational(rec);
+    let xlsx = build_xlsx(rec);
 
     MmdbRecord {
         range: rec.range.clone(),
@@ -32,8 +34,8 @@ pub fn to_mmdb_record(rec: &ScanGwRecord) -> MmdbRecord {
         autonomous_system_organization,
         whois,
         gateway,
-        operational,
-        xlsx_matched: rec.xlsx.is_some(),
+        xlsx,
+        xlsx_matched: rec.xlsx.as_ref().is_some_and(|m| !m.is_empty()),
         gateway_found: rec.gateway.status == "inservice",
     }
 }
@@ -135,9 +137,28 @@ fn build_gateway_export(rec: &ScanGwRecord) -> Option<GatewayExport> {
     })
 }
 
-fn build_operational(rec: &ScanGwRecord) -> Option<OperationalData> {
-    let xlsx = rec.xlsx.as_ref()?;
-    let obj = xlsx.as_object()?;
+fn build_xlsx(rec: &ScanGwRecord) -> Option<HashMap<String, OperationalData>> {
+    let xlsx_map = rec.xlsx.as_ref()?;
+    if xlsx_map.is_empty() {
+        return None;
+    }
+
+    let mut result: HashMap<String, OperationalData> = HashMap::new();
+    for (sheettype, row_value) in xlsx_map {
+        if let Some(data) = extract_operational(row_value) {
+            result.insert(sheettype.clone(), data);
+        }
+    }
+
+    if result.is_empty() {
+        None
+    } else {
+        Some(result)
+    }
+}
+
+fn extract_operational(row_value: &serde_json::Value) -> Option<OperationalData> {
+    let obj = row_value.as_object()?;
 
     let source = obj.get("_source").and_then(|v| v.as_object());
     let filename = source
@@ -155,7 +176,7 @@ fn build_operational(rec: &ScanGwRecord) -> Option<OperationalData> {
     let fields: serde_json::Map<String, serde_json::Value> = obj
         .iter()
         .filter(|(k, _)| k.as_str() != "_source")
-        .map(|(k, v)| (k.clone(), v.clone()))
+        .map(|(k, v): (&String, &serde_json::Value)| (k.clone(), v.clone()))
         .collect();
 
     Some(OperationalData {
@@ -208,11 +229,14 @@ mod tests {
             host_ip: None,
             host_ptr: None,
             measured_at: Some("2026-05-09T07:18:05Z".to_owned()),
-            xlsx: Some(json!({
-                "_source": {"file": "IPAM.xlsx", "sheet": "border1.ty1", "row_index": 0},
-                "serviceid": "SVC-001",
-                "cableid": "C10001"
-            })),
+            xlsx: Some(std::collections::HashMap::from([(
+                "backbone".to_owned(),
+                json!({
+                    "_source": {"file": "IPAM.xlsx", "sheet": "border1.ty1", "row_index": 0, "sheettype": "backbone"},
+                    "serviceid": "SVC-001",
+                    "cableid": "C10001"
+                }),
+            )])),
             xlsx_matched: false,
             gateway_found: false,
         }
@@ -250,13 +274,14 @@ mod tests {
         assert_eq!(gw.interface.as_deref(), Some("xe-0-0-1"));
         assert_eq!(gw.facing.as_deref(), Some("user"));
 
-        let op = mmdb.operational.as_ref().unwrap();
-        assert_eq!(op.filename, "IPAM.xlsx");
-        assert_eq!(op.sheetname, "border1.ty1");
-        assert_eq!(op.fields["serviceid"], "SVC-001");
-        assert_eq!(op.fields["cableid"], "C10001");
+        let xlsx = mmdb.xlsx.as_ref().unwrap();
+        let bb = xlsx.get("backbone").unwrap();
+        assert_eq!(bb.filename, "IPAM.xlsx");
+        assert_eq!(bb.sheetname, "border1.ty1");
+        assert_eq!(bb.fields["serviceid"], "SVC-001");
+        assert_eq!(bb.fields["cableid"], "C10001");
         // _source must not leak into fields
-        assert!(op.fields.get("_source").is_none());
+        assert!(bb.fields.get("_source").is_none());
     }
 
     #[test]
@@ -264,7 +289,7 @@ mod tests {
         let mut rec = base_record();
         rec.xlsx = None;
         let mmdb = to_mmdb_record(&rec);
-        assert!(mmdb.operational.is_none());
+        assert!(mmdb.xlsx.is_none());
     }
 
     #[test]
@@ -380,5 +405,96 @@ mod tests {
     fn continent_unknown_returns_none() {
         assert_eq!(continent_from_country("XX"), None);
         assert_eq!(continent_from_country(""), None);
+    }
+
+    // --- xlsx sheettype map conversion ---
+
+    fn record_with_xlsx(
+        xlsx: std::collections::HashMap<String, serde_json::Value>,
+    ) -> ScanGwRecord {
+        let mut rec = base_record();
+        rec.xlsx = Some(xlsx);
+        rec
+    }
+
+    #[test]
+    fn to_mmdb_record_backbone_and_hosting() {
+        let rec = record_with_xlsx(std::collections::HashMap::from([
+            (
+                "backbone".to_owned(),
+                json!({
+                    "_source": {"file": "A.xlsx", "sheet": "NW", "row_index": 0, "sheettype": "backbone"},
+                    "serviceid": "SVC-001"
+                }),
+            ),
+            (
+                "hosting".to_owned(),
+                json!({
+                    "_source": {"file": "B.xlsx", "sheet": "IP", "row_index": 0, "sheettype": "hosting"},
+                    "hostname": "customer1.example.com"
+                }),
+            ),
+        ]));
+
+        let mmdb = to_mmdb_record(&rec);
+        assert!(mmdb.xlsx_matched);
+        let xlsx = mmdb.xlsx.as_ref().unwrap();
+        assert_eq!(xlsx.len(), 2);
+
+        let bb = xlsx.get("backbone").unwrap();
+        assert_eq!(bb.filename, "A.xlsx");
+        assert_eq!(bb.sheetname, "NW");
+        assert_eq!(bb.fields["serviceid"], "SVC-001");
+        assert!(bb.fields.get("_source").is_none());
+
+        let ho = xlsx.get("hosting").unwrap();
+        assert_eq!(ho.filename, "B.xlsx");
+        assert_eq!(ho.sheetname, "IP");
+        assert_eq!(ho.fields["hostname"], "customer1.example.com");
+        assert!(ho.fields.get("_source").is_none());
+    }
+
+    #[test]
+    fn to_mmdb_record_backbone_only() {
+        let rec = record_with_xlsx(std::collections::HashMap::from([(
+            "backbone".to_owned(),
+            json!({
+                "_source": {"file": "A.xlsx", "sheet": "NW", "row_index": 0},
+                "serviceid": "SVC-001"
+            }),
+        )]));
+
+        let mmdb = to_mmdb_record(&rec);
+        assert!(mmdb.xlsx_matched);
+        let xlsx = mmdb.xlsx.as_ref().unwrap();
+        assert_eq!(xlsx.len(), 1);
+        assert!(xlsx.contains_key("backbone"));
+        assert!(!xlsx.contains_key("hosting"));
+    }
+
+    #[test]
+    fn to_mmdb_record_hosting_only() {
+        let rec = record_with_xlsx(std::collections::HashMap::from([(
+            "hosting".to_owned(),
+            json!({
+                "_source": {"file": "B.xlsx", "sheet": "IP", "row_index": 0},
+                "hostname": "customer1.example.com"
+            }),
+        )]));
+
+        let mmdb = to_mmdb_record(&rec);
+        assert!(mmdb.xlsx_matched);
+        let xlsx = mmdb.xlsx.as_ref().unwrap();
+        assert_eq!(xlsx.len(), 1);
+        assert!(xlsx.contains_key("hosting"));
+        assert!(!xlsx.contains_key("backbone"));
+    }
+
+    #[test]
+    fn to_mmdb_record_empty_xlsx_map_is_none() {
+        let rec = record_with_xlsx(std::collections::HashMap::new());
+        let mmdb = to_mmdb_record(&rec);
+        assert!(!mmdb.xlsx_matched);
+        assert!(mmdb.xlsx.is_none());
     }
 }

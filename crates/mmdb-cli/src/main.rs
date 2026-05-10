@@ -165,9 +165,15 @@ async fn main() -> anyhow::Result<()> {
                     anyhow::bail!("scan subcommand requires Unix; use WSL2 on Windows");
                 }
             }
-            cli::Command::Validate { init_sheets, ptr } => {
+            cli::Command::Validate {
+                init_sheets,
+                ptr,
+                xlsx_rows,
+            } => {
                 if ptr {
                     validate::run_ptr(&config, std::path::Path::new("data/scanned.jsonl"))?;
+                } else if xlsx_rows {
+                    validate::run_xlsx_rows(std::path::Path::new("data/xlsx-rows.jsonl"), &config)?;
                 } else {
                     validate::run(&config, init_sheets)?;
                 }

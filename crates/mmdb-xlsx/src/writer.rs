@@ -7,6 +7,8 @@ use indexmap::IndexMap;
 use serde::Serialize;
 use tokio::io::AsyncWriteExt as _;
 
+use mmdb_core::config::SheetType;
+
 use crate::reader::{CellValue, SheetResult};
 
 // -------------------------------------------------------------------------------------------------
@@ -19,6 +21,7 @@ struct XlsxSource {
     file: String,
     sheet: String,
     row_index: usize,
+    sheettype: SheetType,
 }
 
 /// One line in `xlsx-rows.jsonl`.
@@ -64,6 +67,7 @@ pub async fn write_jsonl(results: &[SheetResult], path: &Path) -> Result<()> {
                     file: sheet.filename.clone(),
                     sheet: sheet.sheetname.clone(),
                     row_index: row.row_index,
+                    sheettype: sheet.sheettype,
                 },
                 fields: row.fields.clone(),
             };
@@ -112,6 +116,8 @@ mod tests {
     use serde_json::Value;
     use tempfile::TempDir;
 
+    use mmdb_core::config::SheetType;
+
     use super::{XlsxJsonlRow, XlsxSource};
     use crate::reader::{CellValue, SheetResult, XlsxRow};
 
@@ -132,6 +138,7 @@ mod tests {
             last_modified: None,
             rows,
             skipped_count: 0,
+            sheettype: SheetType::Backbone,
         }
     }
 
@@ -148,6 +155,7 @@ mod tests {
                 file: "IPAM.xlsx".to_owned(),
                 sheet: "border1.ty1".to_owned(),
                 row_index: 3,
+                sheettype: SheetType::Backbone,
             },
             fields,
         };

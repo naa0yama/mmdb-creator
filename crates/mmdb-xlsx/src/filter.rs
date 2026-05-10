@@ -77,6 +77,7 @@ mod tests {
             last_modified: None,
             rows,
             skipped_count: 0,
+            sheettype: mmdb_core::config::SheetType::Backbone,
         }
     }
 

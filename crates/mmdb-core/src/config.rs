@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// Top-level configuration loaded from `config.toml`.
 #[allow(dead_code)]
@@ -329,6 +329,22 @@ fn default_mmdb_path() -> PathBuf {
     PathBuf::from("data/output.mmdb")
 }
 
+/// Excel sheet classification used to select the appropriate match algorithm.
+///
+/// - `backbone`: infra/physical info at coarse CIDR granularity (/21–/24).
+///   Matched via PTR capture groups or bidirectional CIDR containment.
+/// - `hosting`: customer IP registration at /32 granularity.
+///   Matched via exact CIDR equality only; `ptr_field` is not supported.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum SheetType {
+    /// Infrastructure / backbone sheets (default).
+    #[default]
+    Backbone,
+    /// Customer IP / hosting sheets.
+    Hosting,
+}
+
 /// Configuration for a single Excel file import.
 #[allow(dead_code, clippy::module_name_repetitions)]
 #[derive(Debug, Clone, Deserialize)]
@@ -344,6 +360,13 @@ pub struct SheetConfig {
     /// Column mapping definitions
     #[serde(default)]
     pub columns: Vec<ColumnMapping>,
+    /// Sheet classification: backbone (default) or hosting.
+    #[serde(default)]
+    pub sheettype: SheetType,
+    /// Redundancy groups: each inner Vec is a set of sheet tab names whose
+    /// duplicate CIDRs are permitted with each other.
+    #[serde(default)]
+    pub groups: Vec<Vec<String>>,
 }
 
 // NOTEST(cfg): serde default callback — trivial constant
@@ -352,20 +375,31 @@ const fn default_header_row() -> u32 {
     1
 }
 
-/// Mapping from an Excel column header to an output field.
+/// Mapping from an Excel column header (or multiple headers) to an output field.
+///
+/// Exactly one of `sheet_name` and `sheet_names` must be set:
+/// - `sheet_name`: maps a single Excel column header to `name`.
+/// - `sheet_names`: merges multiple `Addresses`-type columns into one field
+///   with CIDR-level deduplication (only valid for `type = "addresses"`).
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub struct ColumnMapping {
-    /// Output field name
+    /// Output field name.
     pub name: String,
-    /// Column header in the Excel sheet
-    pub sheet_name: String,
-    /// Data type for parsing
+    /// Single Excel column header. Mutually exclusive with `sheet_names`.
+    #[serde(default)]
+    pub sheet_name: Option<String>,
+    /// Multiple Excel column headers to aggregate. Only valid with
+    /// `type = "addresses"`. Mutually exclusive with `sheet_name`.
+    #[serde(default)]
+    pub sheet_names: Option<Vec<String>>,
+    /// Data type for parsing.
     #[serde(rename = "type")]
     pub col_type: ColumnType,
     /// PTR capture group name used as a join key for PTR-to-xlsx matching.
     /// When set, `Config.normalize[ptr_field]` rules are applied to both
     /// the PTR-captured value and this column's value before comparison.
+    /// Cannot be combined with `sheet_names`.
     #[serde(default)]
     pub ptr_field: Option<String>,
 }

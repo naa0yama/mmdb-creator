@@ -51,7 +51,7 @@ JSONL を常に出力しておくことで:
 7. mmdbctl import --json --ip 4 --size 32
        --fields continent,country,autonomous_system_number,
                 autonomous_system_organization,whois,gateway,
-                operational,xlsx_matched,gateway_found
+                xlsx,xlsx_matched,gateway_found
        -i data/output.jsonl -o <out>
 ```
 
@@ -63,7 +63,7 @@ JSONL を常に出力しておくことで:
 Steps 2-3 warnings (non-fatal):
 
 - `gateway.status != "inservice"` → warn count at end
-- `xlsx.is_none()` → warn count at end (expected for whois-only ranges)
+- `xlsx` map absent or empty → warn count at end (expected for whois-only ranges)
 
 ---
 
@@ -99,11 +99,13 @@ GeoLite2-ASN + GeoLite2-City 互換フィールド + カスタムフィールド
 		"facing": "user"
 	},
 
-	"operational": {
-		"filename": "IPAM.xlsx",
-		"sheetname": "border1.ty1",
-		"serviceid": "SVC-001",
-		"cableid": "C10001"
+	"xlsx": {
+		"backbone": {
+			"filename": "IPAM.xlsx",
+			"sheetname": "border1.ty1",
+			"serviceid": "SVC-001",
+			"cableid": "C10001"
+		}
 	},
 
 	"xlsx_matched": true,
@@ -124,36 +126,36 @@ GeoLite2-ASN + GeoLite2-City 互換フィールド + カスタムフィールド
 
 - `whois` — whois 由来データ (inetnum, netname, descr, source, last_modified)
 - `gateway` — scan PTR 解析で特定したゲートウェイデバイス情報
-- `operational` — xlsx 由来の運用データ (_source + 全カラム)
+- `xlsx` — xlsx 由来の運用データ。sheettype ("backbone"/"hosting") をキーとする map; 各値は _source 由来の filename/sheetname と全カラムを含む
 
 ---
 
 ## ScanGwRecord → MmdbRecord Field Mapping
 
-| `MmdbRecord` field               | Source in `ScanGwRecord`     | Transform                             |
-| -------------------------------- | ---------------------------- | ------------------------------------- |
-| `range`                          | `range`                      | —                                     |
-| `autonomous_system_number`       | `as_num`                     | parse `"AS64496"` / `"64496"` → `u32` |
-| `autonomous_system_organization` | `as_name`                    | —                                     |
-| `country.iso_code`               | `country`                    | —                                     |
-| `continent.code`                 | derived from `country`       | static ISO-3166 → continent map       |
-| `whois.inetnum`                  | `inetnum`                    | —                                     |
-| `whois.netname`                  | `netname`                    | —                                     |
-| `whois.descr`                    | `descr`                      | —                                     |
-| `whois.source`                   | `whois_source`               | —                                     |
-| `whois.last_modified`            | `whois_last_modified`        | —                                     |
-| `gateway.ip`                     | `gateway.ip`                 | —                                     |
-| `gateway.ptr`                    | `gateway.ptr`                | —                                     |
-| `gateway.device`                 | `gateway.device.device`      | —                                     |
-| `gateway.device_role`            | `gateway.device.device_role` | —                                     |
-| `gateway.facility`               | `gateway.device.facility`    | —                                     |
-| `gateway.interface`              | `gateway.device.interface`   | —                                     |
-| `gateway.facing`                 | `gateway.device.facing`      | —                                     |
-| `operational.filename`           | `xlsx._source.file`          | —                                     |
-| `operational.sheetname`          | `xlsx._source.sheet`         | —                                     |
-| `operational.*` (flatten)        | `xlsx.*` excluding `_source` | strip `_source`, flatten remainder    |
-| `xlsx_matched`                   | derived                      | `rec.xlsx.is_some()`                  |
-| `gateway_found`                  | derived                      | `rec.gateway.status == "inservice"`   |
+| `MmdbRecord` field               | Source in `ScanGwRecord`       | Transform                                            |
+| -------------------------------- | ------------------------------ | ---------------------------------------------------- |
+| `range`                          | `range`                        | —                                                    |
+| `autonomous_system_number`       | `as_num`                       | parse `"AS64496"` / `"64496"` → `u32`                |
+| `autonomous_system_organization` | `as_name`                      | —                                                    |
+| `country.iso_code`               | `country`                      | —                                                    |
+| `continent.code`                 | derived from `country`         | static ISO-3166 → continent map                      |
+| `whois.inetnum`                  | `inetnum`                      | —                                                    |
+| `whois.netname`                  | `netname`                      | —                                                    |
+| `whois.descr`                    | `descr`                        | —                                                    |
+| `whois.source`                   | `whois_source`                 | —                                                    |
+| `whois.last_modified`            | `whois_last_modified`          | —                                                    |
+| `gateway.ip`                     | `gateway.ip`                   | —                                                    |
+| `gateway.ptr`                    | `gateway.ptr`                  | —                                                    |
+| `gateway.device`                 | `gateway.device.device`        | —                                                    |
+| `gateway.device_role`            | `gateway.device.device_role`   | —                                                    |
+| `gateway.facility`               | `gateway.device.facility`      | —                                                    |
+| `gateway.interface`              | `gateway.device.interface`     | —                                                    |
+| `gateway.facing`                 | `gateway.device.facing`        | —                                                    |
+| `xlsx.<type>.filename`           | `xlsx[type]._source.file`      | `type` = "backbone" or "hosting"                     |
+| `xlsx.<type>.sheetname`          | `xlsx[type]._source.sheet`     | —                                                    |
+| `xlsx.<type>.*` (flatten)        | `xlsx[type].*` excl. `_source` | strip `_source`, flatten remainder                   |
+| `xlsx_matched`                   | derived                        | `rec.xlsx.as_ref().is_some_and(\|m\| !m.is_empty())` |
+| `gateway_found`                  | derived                        | `rec.gateway.status == "inservice"`                  |
 
 ---
 

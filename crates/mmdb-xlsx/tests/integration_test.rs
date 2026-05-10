@@ -32,34 +32,41 @@ fn test_config() -> SheetConfig {
         filename: workspace_root().join("data/exsample/IPAM_20260401r3.xlsx"),
         excludes_sheets: vec![],
         header_row: 3, // 1-indexed: row 3 = 0-indexed row 2 = the header row
+        sheettype: mmdb_core::config::SheetType::Backbone,
+        groups: vec![],
         columns: vec![
             ColumnMapping {
                 name: "site".to_owned(),
-                sheet_name: "site".to_owned(),
+                sheet_name: Some("site".to_owned()),
+                sheet_names: None,
                 col_type: ColumnType::String,
                 ptr_field: None,
             },
             ColumnMapping {
                 name: "host".to_owned(),
-                sheet_name: "host".to_owned(),
+                sheet_name: Some("host".to_owned()),
+                sheet_names: None,
                 col_type: ColumnType::String,
                 ptr_field: None,
             },
             ColumnMapping {
                 name: "vlanid".to_owned(),
-                sheet_name: "VLANID".to_owned(),
+                sheet_name: Some("VLANID".to_owned()),
+                sheet_names: None,
                 col_type: ColumnType::Integer,
                 ptr_field: None,
             },
             ColumnMapping {
                 name: "demarc_addresses".to_owned(),
-                sheet_name: "DEMARC addresses".to_owned(),
+                sheet_name: Some("DEMARC addresses".to_owned()),
+                sheet_names: None,
                 col_type: ColumnType::Addresses,
                 ptr_field: None,
             },
             ColumnMapping {
                 name: "use".to_owned(),
-                sheet_name: "use".to_owned(),
+                sheet_name: Some("use".to_owned()),
+                sheet_names: None,
                 col_type: ColumnType::Bool,
                 ptr_field: None,
             },
@@ -179,7 +186,9 @@ fn inspect_sheets_returns_sheet_names_and_headers() {
         filename: workspace_root().join("data/exsample/IPAM_20260401r3.xlsx"),
         excludes_sheets: vec![],
         header_row: 3,
-        columns: vec![], // inspect_sheets doesn't need columns
+        sheettype: mmdb_core::config::SheetType::Backbone,
+        groups: vec![],
+        columns: vec![],
     };
     let sheets = inspect_sheets(&config, false).unwrap();
     assert_eq!(sheets.len(), 2);
@@ -204,6 +213,8 @@ fn excludes_sheets_filters_correctly() {
         filename: workspace_root().join("data/exsample/IPAM_20260401r3.xlsx"),
         excludes_sheets: vec!["border1.ty1".to_owned(), "border1.ty2".to_owned()],
         header_row: 3,
+        sheettype: mmdb_core::config::SheetType::Backbone,
+        groups: vec![],
         columns: vec![],
     };
     let result = read_xlsx(&config);

@@ -10,7 +10,7 @@ use anyhow::{Context as _, anyhow};
 use calamine::{Data, Range, Reader, Xlsx, open_workbook};
 use indexmap::IndexMap;
 use ipnet::IpNet;
-use mmdb_core::config::{ColumnMapping, ColumnType, SheetConfig};
+use mmdb_core::config::{ColumnMapping, ColumnType, SheetConfig, SheetType};
 use serde::Serialize;
 
 use crate::address::parse_addresses;
@@ -68,6 +68,8 @@ pub struct SheetResult {
     pub rows: Vec<XlsxRow>,
     /// Number of rows that were skipped due to parse errors.
     pub skipped_count: usize,
+    /// Sheet classification (backbone or hosting) from config.
+    pub sheettype: SheetType,
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -114,8 +116,15 @@ pub fn read_xlsx(config: &SheetConfig) -> anyhow::Result<Vec<SheetResult>> {
         let range: Range<Data> = wb
             .worksheet_range(sheetname)
             .with_context(|| format!("failed to read sheet '{sheetname}'"))?;
-        let result = read_sheet(&range, config, &filename, sheetname, last_modified.clone())
-            .with_context(|| format!("failed to parse sheet '{sheetname}'"))?;
+        let result = read_sheet(
+            &range,
+            config,
+            &filename,
+            sheetname,
+            last_modified.clone(),
+            config.sheettype,
+        )
+        .with_context(|| format!("failed to parse sheet '{sheetname}'"))?;
         results.push(result);
     }
 
@@ -238,6 +247,7 @@ fn read_sheet(
     filename: &str,
     sheetname: &str,
     last_modified: Option<std::string::String>,
+    sheettype: SheetType,
 ) -> anyhow::Result<SheetResult> {
     // REASON: header_row is u32, and usize is >= u32 on all supported targets.
     #[allow(clippy::cast_possible_truncation, clippy::as_conversions)]
@@ -292,6 +302,7 @@ fn read_sheet(
         last_modified,
         rows,
         skipped_count,
+        sheettype,
     })
 }
 
@@ -312,12 +323,39 @@ fn parse_row(
         IndexMap::with_capacity(columns.len());
 
     for mapping in columns {
-        let name = &mapping.sheet_name;
+        if let Some(ref snames) = mapping.sheet_names {
+            // Multi-column aggregation path (Addresses only, validated upstream).
+            let mut nets: Vec<IpNet> = Vec::new();
+            for sn in snames {
+                let Some(&col_idx) = header_map.get(sn.as_str()) else {
+                    continue; // absent header → skip silently
+                };
+                let data = row.get(col_idx).unwrap_or(&Data::Empty);
+                if let Ok(CellValue::Addresses(mut addrs)) =
+                    parse_cell(data, &ColumnType::Addresses)
+                {
+                    nets.append(&mut addrs);
+                }
+            }
+            // Deduplicate preserving insertion order.
+            let mut seen = std::collections::HashSet::new();
+            nets.retain(|n| seen.insert(*n));
+            if !nets.is_empty() {
+                fields.insert(mapping.name.clone(), CellValue::Addresses(nets));
+            }
+            continue;
+        }
+
+        // Single-column path.
+        let name = mapping.sheet_name.as_deref().unwrap_or("");
         let value = match header_map.get(name) {
             None => {
+                if matches!(mapping.col_type, ColumnType::Addresses) {
+                    continue;
+                }
                 tracing::warn!(
                     sheet = sheetname,
-                    column = %name,
+                    column = name,
                     "column header not found in sheet; using empty string"
                 );
                 CellValue::String(std::string::String::new())
@@ -332,6 +370,9 @@ fn parse_row(
                     .map_err(|e| anyhow!("column '{name}' row {row_num}: {e}"))?
             }
         };
+        if matches!(&value, CellValue::Addresses(v) if v.is_empty()) {
+            continue;
+        }
         fields.insert(mapping.name.clone(), value);
     }
 
@@ -446,10 +487,14 @@ fn cell_to_string(data: &Data) -> Option<std::string::String> {
 mod tests {
     #![allow(clippy::indexing_slicing, clippy::unwrap_used)]
 
+    use std::collections::HashMap;
+
     use calamine::Data;
     use ipnet::IpNet;
 
-    use super::{CellValue, ColumnType, collect_preview_rows, parse_cell};
+    use mmdb_core::config::ColumnMapping;
+
+    use super::{CellValue, ColumnType, collect_preview_rows, parse_cell, parse_row};
 
     // ---- parse_cell: String ----
 
@@ -534,10 +579,6 @@ mod tests {
 
     #[test]
     fn build_header_map_indices() {
-        use std::collections::HashMap;
-
-        use calamine::Data;
-
         // Simulate a header row: ["Name", "Age", "IP"]
         let header_row = [
             Data::String("Name".to_owned()),
@@ -605,5 +646,170 @@ mod tests {
         let rows: Vec<&[Data]> = vec![&r0, &r1];
         let preview = collect_preview_rows(&rows, 0);
         assert_eq!(preview[1], vec!["", "val"]);
+    }
+
+    // ---- parse_row: empty Addresses omission ----
+
+    fn addr_col(name: &str, sheet_name: &str) -> ColumnMapping {
+        ColumnMapping {
+            name: name.to_owned(),
+            sheet_name: Some(sheet_name.to_owned()),
+            sheet_names: None,
+            col_type: ColumnType::Addresses,
+            ptr_field: None,
+        }
+    }
+
+    fn header_map(headers: &[&str]) -> HashMap<std::string::String, usize> {
+        headers
+            .iter()
+            .enumerate()
+            .map(|(i, h)| ((*h).to_owned(), i))
+            .collect()
+    }
+
+    #[test]
+    fn empty_addresses_column_is_omitted() {
+        let cols = vec![addr_col("addr", "Addr")];
+        let hmap = header_map(&["Addr"]);
+        let row = vec![Data::Empty];
+        let result = parse_row(&row, &hmap, &cols, "Sheet1", 0).unwrap();
+        assert!(
+            !result.fields.contains_key("addr"),
+            "empty Addresses key must be absent"
+        );
+    }
+
+    #[test]
+    fn nonempty_addresses_column_is_present() {
+        let cols = vec![addr_col("addr", "Addr")];
+        let hmap = header_map(&["Addr"]);
+        let row = vec![Data::String("198.51.100.0/24".to_owned())];
+        let result = parse_row(&row, &hmap, &cols, "Sheet1", 0).unwrap();
+        assert!(
+            result.fields.contains_key("addr"),
+            "non-empty Addresses key must be present"
+        );
+    }
+
+    #[test]
+    fn mixed_empty_and_nonempty_addresses() {
+        let cols = vec![addr_col("addr1", "Addr1"), addr_col("addr2", "Addr2")];
+        let hmap = header_map(&["Addr1", "Addr2"]);
+        let row = vec![Data::Empty, Data::String("198.51.100.0/24".to_owned())];
+        let result = parse_row(&row, &hmap, &cols, "Sheet1", 0).unwrap();
+        assert!(
+            !result.fields.contains_key("addr1"),
+            "empty key must be absent"
+        );
+        assert!(
+            result.fields.contains_key("addr2"),
+            "non-empty key must be present"
+        );
+    }
+
+    fn string_col(name: &str, sheet_name: &str) -> ColumnMapping {
+        ColumnMapping {
+            name: name.to_owned(),
+            sheet_name: Some(sheet_name.to_owned()),
+            sheet_names: None,
+            col_type: ColumnType::String,
+            ptr_field: None,
+        }
+    }
+
+    fn multi_addr_col(name: &str, sheet_names: &[&str]) -> ColumnMapping {
+        ColumnMapping {
+            name: name.to_owned(),
+            sheet_name: None,
+            sheet_names: Some(sheet_names.iter().map(|s| (*s).to_owned()).collect()),
+            col_type: ColumnType::Addresses,
+            ptr_field: None,
+        }
+    }
+
+    #[test]
+    fn addresses_column_absent_from_sheet_is_omitted() {
+        let cols = vec![addr_col("addr", "Addr")];
+        let hmap = header_map(&[]);
+        let row: Vec<Data> = vec![];
+        let result = parse_row(&row, &hmap, &cols, "Sheet1", 0).unwrap();
+        assert!(
+            !result.fields.contains_key("addr"),
+            "Addresses column absent from sheet must be omitted"
+        );
+    }
+
+    #[test]
+    fn string_column_absent_from_sheet_uses_empty_string() {
+        let cols = vec![string_col("site", "Site")];
+        let hmap = header_map(&[]);
+        let row: Vec<Data> = vec![];
+        let result = parse_row(&row, &hmap, &cols, "Sheet1", 0).unwrap();
+        assert!(
+            result.fields.contains_key("site"),
+            "String column absent from sheet must still appear as empty string"
+        );
+        assert_eq!(result.fields["site"], CellValue::String(String::new()));
+    }
+
+    // ---- parse_row: sheet_names aggregation ----
+
+    #[test]
+    fn sheet_names_merges_addresses_from_multiple_columns() {
+        let cols = vec![multi_addr_col("addrs", &["Addr1", "Addr2"])];
+        let hmap = header_map(&["Addr1", "Addr2"]);
+        let row = vec![
+            Data::String("198.51.100.0/30".to_owned()),
+            Data::String("198.51.100.4/30".to_owned()),
+        ];
+        let result = parse_row(&row, &hmap, &cols, "Sheet1", 0).unwrap();
+        let CellValue::Addresses(ref nets) = result.fields["addrs"] else {
+            panic!("expected Addresses");
+        };
+        assert_eq!(nets.len(), 2);
+    }
+
+    #[test]
+    fn sheet_names_deduplicates_cidrs() {
+        let cols = vec![multi_addr_col("addrs", &["Addr1", "Addr2"])];
+        let hmap = header_map(&["Addr1", "Addr2"]);
+        let row = vec![
+            Data::String("198.51.100.0/30".to_owned()),
+            Data::String("198.51.100.0/30".to_owned()), // duplicate
+        ];
+        let result = parse_row(&row, &hmap, &cols, "Sheet1", 0).unwrap();
+        let CellValue::Addresses(ref nets) = result.fields["addrs"] else {
+            panic!("expected Addresses");
+        };
+        assert_eq!(nets.len(), 1, "duplicate CIDR must be deduplicated");
+    }
+
+    #[test]
+    fn sheet_names_all_empty_omits_key() {
+        let cols = vec![multi_addr_col("addrs", &["Addr1", "Addr2"])];
+        let hmap = header_map(&["Addr1", "Addr2"]);
+        let row = vec![Data::Empty, Data::Empty];
+        let result = parse_row(&row, &hmap, &cols, "Sheet1", 0).unwrap();
+        assert!(
+            !result.fields.contains_key("addrs"),
+            "all-empty sheet_names must omit key"
+        );
+    }
+
+    #[test]
+    fn sheet_names_absent_header_skipped() {
+        let cols = vec![multi_addr_col("addrs", &["Addr1", "Addr2"])];
+        let hmap = header_map(&["Addr1"]); // Addr2 absent
+        let row = vec![Data::String("198.51.100.0/30".to_owned())];
+        let result = parse_row(&row, &hmap, &cols, "Sheet1", 0).unwrap();
+        let CellValue::Addresses(ref nets) = result.fields["addrs"] else {
+            panic!("expected Addresses");
+        };
+        assert_eq!(
+            nets.len(),
+            1,
+            "absent header skipped; present header contributes"
+        );
     }
 }
