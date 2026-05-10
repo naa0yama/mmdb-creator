@@ -41,17 +41,26 @@ JSONL を常に出力しておくことで:
 
 ```
 1. require_command("mmdbctl")
-2. read data/scanned.jsonl line-by-line → ScanGwRecord
-3. for each record:
+2. rotate_backup("data/output.jsonl", keep=5)   ← before overwrite
+3. rotate_backup("data/output.mmdb", keep=5)    ← before overwrite
+4. read data/scanned.jsonl line-by-line → ScanGwRecord
+5. for each record:
      a. convert to MmdbRecord (field mapping table below)
      b. write JSON line to data/output.jsonl
-4. log summary: total, gateway=inservice, xlsx-matched, skipped
-5. mmdbctl import --json --ip 4 --size 32 -i data/output.jsonl -o <out>
+6. log summary: total, gateway=inservice, xlsx-matched, skipped
+7. mmdbctl import --json --ip 4 --size 32
+       --fields continent,country,autonomous_system_number,
+                autonomous_system_organization,whois,gateway,
+                operational,xlsx_matched,gateway_found
+       -i data/output.jsonl -o <out>
 ```
 
 `--json` フラグは `.jsonl` 拡張子のファイルを NDJSON として扱うために必要。
 
-Step 4 warnings (non-fatal):
+`--fields` を明示することで、先頭 JSON レコードにフィールドが欠けていても
+全フィールドが MMDB に記録される (mmdbctl のデフォルト挙動を抑止)。
+
+Steps 2-3 warnings (non-fatal):
 
 - `gateway.status != "inservice"` → warn count at end
 - `xlsx.is_none()` → warn count at end (expected for whois-only ranges)
@@ -95,7 +104,10 @@ GeoLite2-ASN + GeoLite2-City 互換フィールド + カスタムフィールド
 		"sheetname": "border1.ty1",
 		"serviceid": "SVC-001",
 		"cableid": "C10001"
-	}
+	},
+
+	"xlsx_matched": true,
+	"gateway_found": true
 }
 ```
 
@@ -140,6 +152,8 @@ GeoLite2-ASN + GeoLite2-City 互換フィールド + カスタムフィールド
 | `operational.filename`           | `xlsx._source.file`          | —                                     |
 | `operational.sheetname`          | `xlsx._source.sheet`         | —                                     |
 | `operational.*` (flatten)        | `xlsx.*` excluding `_source` | strip `_source`, flatten remainder    |
+| `xlsx_matched`                   | derived                      | `rec.xlsx.is_some()`                  |
+| `gateway_found`                  | derived                      | `rec.gateway.status == "inservice"`   |
 
 ---
 

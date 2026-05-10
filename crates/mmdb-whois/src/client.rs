@@ -8,6 +8,8 @@
 //! and reused for `cache_ttl_secs` to avoid re-querying the same prefix.
 
 use std::{
+    collections::HashMap,
+    net::IpAddr,
     path::PathBuf,
     time::{Duration, SystemTime},
 };
@@ -18,18 +20,26 @@ use mmdb_core::{
     config::WhoisConfig,
     types::{AutNumData, WhoisData},
 };
+use serde::{Deserialize, Serialize};
 use tokio::{
     fs as tfs,
     io::{AsyncReadExt as _, AsyncWriteExt as _},
     net::TcpStream,
+    sync::Mutex,
     time,
 };
 
-use crate::rpsl::{inetnum_to_net, parse_referral, parse_rpsl_all};
+use crate::rpsl::{inetnum_to_net, parse_iana_response, parse_referral, parse_rpsl_all};
+
+/// Disk-serializable IANA cache entry.
+#[derive(Debug, Serialize, Deserialize)]
+struct IanaCacheEntry {
+    block: String,
+    server: String,
+}
 
 /// Whois client with built-in rate limiting, retry logic, and per-CIDR response cache.
 #[allow(clippy::module_name_repetitions)]
-#[derive(Debug)]
 pub struct WhoisClient {
     server: String,
     timeout: Duration,
@@ -38,6 +48,18 @@ pub struct WhoisClient {
     initial_backoff: Duration,
     cache_dir: PathBuf,
     cache_ttl: Duration,
+    auto_rir: bool,
+    iana_cache: Mutex<Option<HashMap<IpNet, String>>>,
+}
+
+impl std::fmt::Debug for WhoisClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WhoisClient")
+            .field("server", &self.server)
+            .field("timeout", &self.timeout)
+            .field("auto_rir", &self.auto_rir)
+            .finish_non_exhaustive()
+    }
 }
 
 impl WhoisClient {
@@ -52,6 +74,8 @@ impl WhoisClient {
             initial_backoff: Duration::from_millis(cfg.initial_backoff_ms),
             cache_dir: PathBuf::from(&cfg.cache_dir),
             cache_ttl: Duration::from_secs(cfg.cache_ttl_secs),
+            auto_rir: cfg.auto_rir,
+            iana_cache: Mutex::new(None),
         }
     }
 
@@ -180,7 +204,7 @@ impl WhoisClient {
         autnum: Option<&AutNumData>,
     ) -> Vec<(IpNet, Result<WhoisData>)> {
         let total = cidrs.len();
-        tracing::info!(total, server = %self.server, "whois: starting batch query");
+        tracing::info!(total, auto_rir = self.auto_rir, fallback_server = %self.server, "whois: starting batch query");
 
         let mut results: Vec<(IpNet, Result<WhoisData>)> = Vec::with_capacity(total);
         let mut cache_hits: usize = 0;
@@ -254,6 +278,132 @@ impl WhoisClient {
         results
     }
 
+    /// Resolve the authoritative WHOIS server for `ip`.
+    ///
+    /// When `auto_rir` is disabled, returns the configured fallback server immediately.
+    /// Otherwise checks the in-memory IANA cache (populated lazily from disk on first call),
+    /// and on a miss queries `whois.iana.org` to discover the correct RIR server.
+    /// Falls back to `self.server` on any IANA lookup failure.
+    // NOTEST(io): IANA TCP 43 lookup and disk cache — depends on network and filesystem
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    async fn resolve_server(&self, ip: IpAddr) -> String {
+        if !self.auto_rir {
+            return self.server.clone();
+        }
+
+        {
+            let mut guard = self.iana_cache.lock().await;
+            if guard.is_none() {
+                let mut entries = HashMap::new();
+                self.fill_iana_from_disk(&mut entries).await;
+                *guard = Some(entries);
+            }
+            if let Some(entries) = guard.as_ref() {
+                for (block, server) in entries {
+                    if block.contains(&ip) {
+                        return server.clone();
+                    }
+                }
+            }
+        }
+
+        match self.iana_lookup(ip).await {
+            Ok((block, server)) => {
+                tracing::debug!(
+                    ip = %ip,
+                    block = %block,
+                    server = %server,
+                    "whois: IANA lookup resolved RIR server"
+                );
+                self.iana_cache
+                    .lock()
+                    .await
+                    .get_or_insert_with(HashMap::new)
+                    .insert(block, server.clone());
+                if let Err(e) = self.save_iana_disk_cache(block, &server).await {
+                    tracing::warn!(error = %e, "whois: failed to write IANA cache");
+                }
+                server
+            }
+            Err(e) => {
+                tracing::warn!(
+                    ip = %ip,
+                    error = %e,
+                    fallback = %self.server,
+                    "whois: IANA lookup failed, using fallback server"
+                );
+                self.server.clone()
+            }
+        }
+    }
+
+    /// Query `whois.iana.org` for `ip` and return the delegation block and RIR server.
+    // NOTEST(io): TCP 43 connection to whois.iana.org — depends on live network
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    async fn iana_lookup(&self, ip: IpAddr) -> Result<(IpNet, String)> {
+        let query = format!("{ip}\r\n");
+        let response = self
+            .tcp43_send(&query, "whois.iana.org")
+            .await
+            .with_context(|| format!("IANA whois query failed for {ip}"))?;
+        parse_iana_response(&response)
+            .with_context(|| format!("IANA whois response missing inetnum/refer for {ip}"))
+    }
+
+    // NOTEST(io): scans filesystem for IANA cache files — depends on filesystem state
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    async fn fill_iana_from_disk(&self, entries: &mut HashMap<IpNet, String>) {
+        let Ok(mut dir) = tfs::read_dir(&self.cache_dir).await else {
+            return;
+        };
+        while let Ok(Some(entry)) = dir.next_entry().await {
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else { continue };
+            let has_json_ext = std::path::Path::new(name)
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("json"));
+            if !name.starts_with("whois-iana-") || !has_json_ext {
+                continue;
+            }
+            let path = entry.path();
+            if !is_cache_fresh(&path, self.cache_ttl).await {
+                continue;
+            }
+            let Ok(raw) = tfs::read(&path).await else {
+                continue;
+            };
+            let Ok(cached) = serde_json::from_slice::<IanaCacheEntry>(&raw) else {
+                continue;
+            };
+            let Ok(block) = cached.block.parse::<IpNet>() else {
+                continue;
+            };
+            entries.insert(block, cached.server);
+        }
+    }
+
+    // NOTEST(io): file I/O — writes IANA cache entry to filesystem
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    async fn save_iana_disk_cache(&self, block: IpNet, server: &str) -> Result<()> {
+        let path = self
+            .cache_dir
+            .join(format!("whois-iana-{}.json", cidr_to_filename(&block)));
+        if let Some(parent) = path.parent() {
+            tfs::create_dir_all(parent)
+                .await
+                .with_context(|| format!("failed to create IANA cache dir {}", parent.display()))?;
+        }
+        let entry = IanaCacheEntry {
+            block: block.to_string(),
+            server: server.to_owned(),
+        };
+        let json = serde_json::to_vec(&entry).context("failed to serialize IANA cache entry")?;
+        tfs::write(&path, &json)
+            .await
+            .with_context(|| format!("failed to write IANA cache {}", path.display()))?;
+        Ok(())
+    }
+
     // NOTEST(io): file I/O — writes NDJSON cache to filesystem
     #[cfg_attr(coverage_nightly, coverage(off))]
     async fn write_cache_ndjson(
@@ -297,7 +447,8 @@ impl WhoisClient {
     // NOTEST(io): delegates to query_server which makes TCP 43 connections
     #[cfg_attr(coverage_nightly, coverage(off))]
     async fn do_query(&self, cidr: &IpNet) -> Result<Vec<WhoisData>> {
-        self.query_server(cidr, &self.server.clone(), 0).await
+        let server = self.resolve_server(cidr.network()).await;
+        self.query_server(cidr, &server, 0).await
     }
 
     /// Query `server` and follow `refer:` referrals up to `MAX_REFERRAL_DEPTH`.
@@ -316,8 +467,7 @@ impl WhoisClient {
             // Step 1: -M query — finds all inetnums contained within the queried CIDR.
             // Preferred over the bare query because BGP prefixes are typically aggregates
             // that contain many customer sub-allocations (e.g. /19 → multiple /25 entries).
-            // Only attempted against the primary server; referral servers skip this step.
-            if server == self.server {
+            if depth == 0 {
                 let response_m = self.tcp43_raw(cidr, server, true).await?;
                 let entries_m = parse_rpsl_all(&response_m);
                 if !entries_m.is_empty() {
@@ -464,6 +614,44 @@ fn is_rate_limited_response(response: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn make_client(auto_rir: bool) -> WhoisClient {
+        WhoisClient {
+            server: String::from("whois.example.net"),
+            timeout: Duration::from_secs(10),
+            rate_limit: Duration::from_millis(0),
+            max_retries: 0,
+            initial_backoff: Duration::from_millis(0),
+            cache_dir: PathBuf::from("/tmp"),
+            cache_ttl: Duration::from_secs(3600),
+            auto_rir,
+            iana_cache: Mutex::new(None),
+        }
+    }
+
+    #[tokio::test]
+    async fn resolve_server_returns_fallback_when_auto_rir_disabled() {
+        let client = make_client(false);
+        let ip: IpAddr = "198.51.100.1".parse().unwrap();
+        let server = client.resolve_server(ip).await;
+        assert_eq!(server, "whois.example.net");
+    }
+
+    #[tokio::test]
+    async fn resolve_server_uses_memory_cache_hit() {
+        let client = make_client(true);
+        let block: IpNet = "198.51.100.0/24".parse().unwrap();
+        {
+            let mut guard = client.iana_cache.lock().await;
+            *guard = Some(HashMap::from([(
+                block,
+                String::from("whois.cached-rir.net"),
+            )]));
+        }
+        let ip: IpAddr = "198.51.100.1".parse().unwrap();
+        let server = client.resolve_server(ip).await;
+        assert_eq!(server, "whois.cached-rir.net");
+    }
 
     #[test]
     fn is_rate_limited_response_detects_patterns() {

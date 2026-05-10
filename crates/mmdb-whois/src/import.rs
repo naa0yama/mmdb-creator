@@ -25,8 +25,9 @@ pub struct WhoisImportOptions {
 ///
 /// # Behaviour
 ///
-/// - When `ip_args` is provided, each CIDR is resolved via RIPE Stat (no ASN loop).
-/// - When `ip_args` is `None`, iterates over ASNs from `asn_args` or `config.asn`.
+/// - IP list (`ip_args` or `config.ip`) and ASN list (`asn_args` or `config.asn`)
+///   are collected independently and combined.  Both can be active at once.
+/// - CLI values take precedence over config values for the same dimension.
 /// - Writes the collected records atomically to [`WhoisImportOptions::output_path`]
 ///   using a `.tmp` → rename strategy.  The caller is responsible for any backup
 ///   rotation before invoking this function.
@@ -47,31 +48,39 @@ pub async fn import(
     let (whois_client, prefix_client) = clients_from_config(config)?;
     let mut whois_records: Vec<WhoisRecord> = Vec::new();
 
-    // Collect prefixes from --ip args (all via RIPE Stat — no TCP 43).
-    if let Some(ref raw_ips) = ip_args {
+    // CLI --ip takes precedence over config.ip; both are optional.
+    let effective_ips: Option<Vec<String>> = if ip_args.is_some() {
+        ip_args
+    } else if !config.ip.is_empty() {
+        Some(config.ip.clone())
+    } else {
+        None
+    };
+
+    // CLI --asn takes precedence over config.asn; both are optional.
+    let effective_asns: Vec<u32> = match asn_args {
+        Some(raw) => parse_asns(&raw).with_context(|| "failed to parse --asn arguments")?,
+        None => config.asn.clone(),
+    };
+
+    if effective_ips.is_none() && effective_asns.is_empty() {
+        tracing::warn!("whois: no --asn, --ip, config.whois.asn, or config.whois.ip provided");
+    }
+
+    // Collect prefixes from --ip / config.ip (all via RIPE Stat — no TCP 43).
+    if let Some(ref raw_ips) = effective_ips {
         let prefixes = parse_prefixes(raw_ips).with_context(|| "failed to parse --ip arguments")?;
         for prefix in &prefixes {
             collect_ip_records(&prefix_client, *prefix, &mut whois_records).await;
         }
     }
 
-    // ASN loop only runs when --ip is not given.
-    if ip_args.is_none() {
-        let asns = match asn_args {
-            Some(raw) => parse_asns(&raw).with_context(|| "failed to parse --asn arguments")?,
-            None => config.asn.clone(),
-        };
-
-        if asns.is_empty() {
-            tracing::warn!("whois: no --asn or --ip provided and config.whois.asn is empty");
-        }
-
-        for asn in asns {
-            // query_asn internally: announced-prefixes → query_autnum → TCP 43 per CIDR.
-            let results = query_asn(&whois_client, &prefix_client, asn).await?;
-            log_results(&results);
-            collect_records(&results, &mut whois_records);
-        }
+    // ASN loop runs independently; combines with IP results when both are active.
+    for asn in effective_asns {
+        // query_asn internally: announced-prefixes → query_autnum → TCP 43 per CIDR.
+        let results = query_asn(&whois_client, &prefix_client, asn).await?;
+        log_results(&results);
+        collect_records(&results, &mut whois_records);
     }
 
     if !whois_records.is_empty() {

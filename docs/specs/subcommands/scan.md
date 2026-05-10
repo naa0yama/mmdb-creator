@@ -166,7 +166,10 @@ TUI 上で "Skipped (cached): N" として表示する。
 1. 全ホップ IP を重複排除
 2. Team Cymru WHOIS bulk (`whois.cymru.com:43`) で ASN を一括取得
 3. DNS reverse lookup で PTR を一括解決
-4. `data/scanned.jsonl` に書き込む
+4. xlsx 行を各 `ScanGwRecord` に付加 (PTR マッチまたは CIDR 包含で選択)
+5. 派生フラグを全レコードに設定してから `data/scanned.jsonl` に書き込む:
+   - `xlsx_matched = xlsx.is_some()`
+   - `gateway_found = gateway.status == "inservice"`
 
 ### PTR Progress Logging
 
@@ -240,6 +243,8 @@ Walk hops from last to first. For each hop:
 		"port": "xe-0/0/1",
 		"serviceid": "SVC-001"
 	},
+	"xlsx_matched": true,
+	"gateway_found": true,
 	"measured_at": "2026-05-09T14:08:43Z"
 }
 ```
@@ -248,6 +253,8 @@ Walk hops from last to first. For each hop:
 - `host_ip`, `host_ptr`: `#[serde(skip)]` — reserved for future host-analysis phase.
 - `inetnum`, `country`, `whois_source`, `whois_last_modified`: joined from whois-cidr.jsonl via LPM at GW-resolution time.
 - `xlsx`: matched xlsx row attached during enrich phase; absent when no match.
+- `xlsx_matched`: `true` when an xlsx row was matched (`xlsx.is_some()`); `false` otherwise.
+- `gateway_found`: `true` when gateway resolution fully succeeded (`gateway.status == "inservice"`); `false` otherwise.
 
 ---
 
@@ -380,7 +387,12 @@ Before writing `data/scanned.jsonl`, `rotate_backup(path, keep=5)` is called:
 3. Read parent dir; collect sibling files matching `{stem}.YYYYMMDD-HHMMSS.{ext}`.
 4. Sort descending (newest first); delete all entries beyond index 4 (keep 5).
 
-Same mechanism applies to `whois-cidr.jsonl` and `xlsx-rows.jsonl`.
+Same mechanism applies to `data/cache/scan/scanning.jsonl` (rotated at scan start),
+`whois-cidr.jsonl`, and `xlsx-rows.jsonl`.
+
+`mmdb build` applies the same rotation to `data/output.jsonl` and `data/output.mmdb`
+before overwriting them (file-extension-aware: `output.YYYYMMDD-HHMMSS.jsonl`,
+`output.YYYYMMDD-HHMMSS.mmdb`).
 
 ---
 

@@ -65,9 +65,9 @@ pub enum Command {
 pub enum MmdbCommand {
     /// Build MMDB from scanned.jsonl via mmdbctl
     Build {
-        /// Output MMDB file path
-        #[arg(short, long, default_value = "data/output.mmdb")]
-        out: PathBuf,
+        /// Output MMDB file path (default: config.mmdb.path)
+        #[arg(short, long)]
+        out: Option<PathBuf>,
         /// Source JSONL file (scanned.jsonl)
         #[arg(short, long, default_value = "data/scanned.jsonl")]
         input: PathBuf,
@@ -75,9 +75,9 @@ pub enum MmdbCommand {
     /// Look up one or more IP addresses in an MMDB file
     #[command(alias = "q")]
     Query {
-        /// MMDB file to query
-        #[arg(short = 'm', long, default_value = "data/output.mmdb")]
-        mmdb: PathBuf,
+        /// MMDB file to query (default: config.mmdb.path)
+        #[arg(short = 'm', long)]
+        mmdb: Option<PathBuf>,
         /// IP addresses to look up
         ips: Vec<String>,
     },
@@ -95,22 +95,34 @@ pub enum MmdbCommand {
 
 ```
 1. require_command("mmdbctl")
-2. read data/scanned.jsonl line-by-line → ScanGwRecord
-3. for each record:
+2. rotate_backup(data/output.jsonl, keep=5)
+3. rotate_backup(<out>, keep=5)
+4. read data/scanned.jsonl line-by-line → ScanGwRecord
+5. for each record:
      a. convert to MmdbRecord (GeoLite2 compatible field names)
      b. write JSON line to data/output.jsonl
-4. log summary: total, gateway=inservice, xlsx-matched, skipped
-5. mmdbctl import --json --ip 4 --size 32 -i data/output.jsonl -o <out>
+6. log summary: total, gateway=inservice, xlsx-matched, skipped
+7. mmdbctl import --json --ip 4 --size 32
+     --fields continent,country,autonomous_system_number,
+              autonomous_system_organization,whois,gateway,operational,
+              xlsx_matched,gateway_found
+     -i data/output.jsonl -o <out>
 ```
+
+`--fields` を明示するのは、mmdbctl がデフォルトで先頭レコードのフィールドのみを採用し、
+後続レコードに追加フィールドがあっても黙って無視するためである。
 
 `--json` フラグは `.jsonl` 拡張子のファイルを NDJSON として扱うために必要。
 
 ### Default Paths
 
-| Argument  | Default              |
-| --------- | -------------------- |
-| `--input` | `data/scanned.jsonl` |
-| `--out`   | `data/output.mmdb`   |
+`--out` defaults to `config.mmdb.path` (configured in `[mmdb] path`, which itself defaults
+to `data/output.mmdb`). `--out` overrides the config value when provided.
+
+| Argument  | Fallback (when omitted) |
+| --------- | ----------------------- |
+| `--input` | `data/scanned.jsonl`    |
+| `--out`   | `config.mmdb.path`      |
 
 ### Output Files
 
@@ -143,6 +155,8 @@ gateway.facility               dc01
 gateway.interface              xe-0-0-1
 gateway.facing                 user
 operational.serviceid          SVC-001
+xlsx_matched                   true
+gateway_found                  true
 =======================================================================
 ```
 
@@ -157,9 +171,11 @@ IP 文字列が無効な場合はエラーとして非ゼロ終了する。
 
 ### Default Paths
 
-| Argument | Default            |
-| -------- | ------------------ |
-| `--mmdb` | `data/output.mmdb` |
+`--mmdb` defaults to `config.mmdb.path`. `--mmdb` overrides the config value when provided.
+
+| Argument | Fallback (when omitted) |
+| -------- | ----------------------- |
+| `--mmdb` | `config.mmdb.path`      |
 
 ---
 

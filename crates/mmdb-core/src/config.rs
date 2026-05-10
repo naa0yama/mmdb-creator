@@ -106,14 +106,22 @@ impl Config {
 #[allow(dead_code, clippy::module_name_repetitions)]
 #[derive(Debug, Deserialize)]
 pub struct WhoisConfig {
-    /// Whois server hostname (TCP port 43)
+    /// Whois server hostname (TCP port 43). Used as fallback when `auto_rir` fails.
+    #[serde(default = "default_whois_server")]
     pub server: String,
+    /// Automatically select the authoritative RIR WHOIS server via whois.iana.org.
+    /// When true (default), the configured server is only used as a fallback.
+    #[serde(default = "default_auto_rir")]
+    pub auto_rir: bool,
     /// Connection timeout in seconds
     #[serde(default = "default_timeout")]
     pub timeout_sec: u64,
     /// ASN numbers to query (used when --asn is not passed on CLI)
     #[serde(default)]
     pub asn: Vec<u32>,
+    /// IP/CIDR prefixes to query directly (used when --ip is not passed on CLI)
+    #[serde(default)]
+    pub ip: Vec<String>,
     /// Delay in milliseconds between consecutive TCP 43 whois queries (default: 2000)
     #[serde(default = "default_rate_limit_ms")]
     pub rate_limit_ms: u64,
@@ -138,6 +146,18 @@ pub struct WhoisConfig {
     /// Delay in seconds between HTTP retry attempts (default: 2)
     #[serde(default = "default_http_retry_delay_secs")]
     pub http_retry_delay_secs: u64,
+}
+
+// NOTEST(cfg): serde default callback — returns constant string
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn default_whois_server() -> String {
+    String::from("whois.iana.org")
+}
+
+// NOTEST(cfg): serde default callback — trivial constant
+#[cfg_attr(coverage_nightly, coverage(off))]
+const fn default_auto_rir() -> bool {
+    true
 }
 
 // NOTEST(cfg): serde default callback — trivial constant, only invoked during deserialization

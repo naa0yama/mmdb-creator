@@ -11,11 +11,23 @@ use mmdb_core::{build::to_mmdb_record, config::Config, external, types::ScanGwRe
 /// Run the build subcommand.
 // NOTEST(io): reads JSONL from disk, writes output.jsonl, invokes mmdbctl binary
 #[cfg_attr(coverage_nightly, coverage(off))]
-#[allow(clippy::unused_async)]
 pub async fn run(_config: &Config, input: &Path, output: &Path) -> Result<()> {
     external::require_commands(&["mmdbctl"])?;
 
     let out_jsonl = Path::new("data/output.jsonl");
+
+    tokio::try_join!(
+        async {
+            crate::backup::rotate_backup(out_jsonl, 5)
+                .await
+                .with_context(|| format!("failed to rotate backup for {}", out_jsonl.display()))
+        },
+        async {
+            crate::backup::rotate_backup(output, 5)
+                .await
+                .with_context(|| format!("failed to rotate backup for {}", output.display()))
+        },
+    )?;
 
     // Read input JSONL and convert each record.
     let file = std::fs::File::open(input)
@@ -39,10 +51,10 @@ pub async fn run(_config: &Config, input: &Path, output: &Path) -> Result<()> {
         let record: ScanGwRecord =
             serde_json::from_str(line).context("failed to parse ScanGwRecord")?;
 
-        if record.gateway.status == "inservice" {
+        if record.gateway_found {
             inservice = inservice.saturating_add(1);
         }
-        if record.xlsx.is_some() {
+        if record.xlsx_matched {
             xlsx_matched = xlsx_matched.saturating_add(1);
         }
         total = total.saturating_add(1);
@@ -63,6 +75,8 @@ pub async fn run(_config: &Config, input: &Path, output: &Path) -> Result<()> {
         out_jsonl.display()
     );
 
+    // Without --fields, mmdbctl infers the field list from the first JSON object
+    // only, silently dropping any field absent from that first record.
     let status = Command::new("mmdbctl")
         .args([
             "import",
@@ -71,6 +85,8 @@ pub async fn run(_config: &Config, input: &Path, output: &Path) -> Result<()> {
             "4",
             "--size",
             "32",
+            "--fields",
+            "continent,country,autonomous_system_number,autonomous_system_organization,whois,gateway,operational,xlsx_matched,gateway_found",
             "-i",
             out_jsonl
                 .to_str()

@@ -194,6 +194,12 @@ pub async fn run(config: &Config) -> Result<()> {
         }
     }
 
+    // Populate derived boolean fields before writing.
+    for record in &mut gw_records {
+        record.xlsx_matched = record.xlsx.is_some();
+        record.gateway_found = record.gateway.status == "inservice";
+    }
+
     // Write range-aggregated GW records to data/scanned.jsonl (atomic).
     let tmp_path = out_path.with_extension("jsonl.tmp");
     write_gw_jsonl(&tmp_path, &gw_records).await?;

@@ -5,7 +5,7 @@
 既存の JSON/JSONL ログファイルを読み込み、各レコードに MMDB ルックアップ結果を付加して出力する。
 
 ```bash
-mmdb-cli enrich --input-enrich-file access.jsonl
+mmdb-cli enrich --input-enrich-file access.jsonl --input-enrich-ip ip_address
 mmdb-cli enrich --input-enrich-file access.jsonl --input-enrich-ip client_ip
 ```
 
@@ -17,8 +17,8 @@ mmdb-cli enrich --input-enrich-file access.jsonl --input-enrich-ip client_ip
 - Records whose IP address is not found in the MMDB receive `"mmdb": null`.
 - Output format matches the input format (JSON array in → JSON array out; JSONL in → JSONL out).
 - Output filename is derived automatically: `input.jsonl` → `input.enriched.jsonl`.
-- MMDB file path is configured via `config.toml` (`[enrich] mmdb_path`).
-- IP address field name in input records is configurable via `--input-enrich-ip` (default: `ip_address`).
+- MMDB file path defaults to `config.mmdb.path` (`[mmdb] path`); override per-run with `--mmdb`.
+- IP address field name in input records is specified via `--input-enrich-ip` (required).
 
 ## Non-Goals
 
@@ -31,12 +31,15 @@ mmdb-cli enrich --input-enrich-file access.jsonl --input-enrich-ip client_ip
 
 ## Configuration
 
+MMDB path is shared across all subcommands via the `[mmdb]` section:
+
 ```toml
-[enrich]
-mmdb_path = "data/output.mmdb"
+[mmdb]
+# path = "data/output.mmdb"   # default
 ```
 
-`Config` gains `pub enrich: Option<EnrichConfig>`. When absent, `mmdb_path` defaults to `"data/output.mmdb"`.
+The `[enrich]` section and `EnrichConfig` struct have been removed.
+Use `--mmdb` on the CLI for a one-off path override.
 
 ---
 
@@ -48,8 +51,11 @@ Enrich {
     #[arg(long)]
     input_enrich_file: PathBuf,
     /// Field name in each record that holds the IP address
-    #[arg(long, default_value = "ip_address")]
+    #[arg(long)]
     input_enrich_ip: String,
+    /// MMDB file to use (default: config.mmdb.path)
+    #[arg(short = 'm', long)]
+    mmdb: Option<PathBuf>,
 },
 ```
 
@@ -59,7 +65,8 @@ Enrich {
 
 ### run() Steps
 
-1. Resolve MMDB path from `config.enrich.mmdb_path` (fallback: `"data/output.mmdb"`).
+1. Receive `mmdb_path: &Path` explicitly from the caller (resolved in `main.rs` from
+   `--mmdb` or `config.mmdb.path`).
 2. Open MMDB with `maxminddb::Reader::open_readfile`.
 3. Detect input format by extension (`.jsonl` → JSONL; anything else → JSON array).
 4. Parse all records into `Vec<serde_json::Value>`.

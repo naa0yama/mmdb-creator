@@ -28,10 +28,10 @@ pub enum Command {
         #[arg(long, conflicts_with = "asn")]
         xlsx: bool,
         /// ASN numbers to query (comma-separated; "AS" prefix is optional, e.g. 64496,AS64497)
-        #[arg(long, value_delimiter = ',', conflicts_with_all = ["ip", "xlsx"])]
+        #[arg(long, value_delimiter = ',', conflicts_with = "xlsx")]
         asn: Option<Vec<String>>,
         /// IP addresses or CIDR prefixes to query directly (comma-separated, e.g. 192.0.2.1,192.0.2.0/24)
-        #[arg(long, value_delimiter = ',', conflicts_with = "asn")]
+        #[arg(long, value_delimiter = ',')]
         ip: Option<Vec<String>>,
     },
     /// Build and query MMDB files
@@ -67,7 +67,7 @@ pub enum Command {
         #[arg(long)]
         input_enrich_file: PathBuf,
         /// Field name in each record that holds the IP address to look up
-        #[arg(long, default_value = "ip_address")]
+        #[arg(long)]
         input_enrich_ip: String,
         /// MMDB file to use for lookups (default: config.mmdb.path)
         #[arg(short = 'm', long)]
@@ -110,7 +110,7 @@ mod tests {
     // --- import conflicts ---
 
     #[test]
-    fn import_asn_conflicts_with_ip() {
+    fn import_asn_and_ip_together_is_valid() {
         assert!(
             try_parse(&[
                 "prog",
@@ -120,7 +120,7 @@ mod tests {
                 "--ip",
                 "198.51.100.0/24"
             ])
-            .is_err()
+            .is_ok()
         );
     }
 
@@ -269,5 +269,32 @@ mod tests {
     #[test]
     fn validate_init_sheets_alone_is_valid() {
         assert!(try_parse(&["prog", "validate", "--init-sheets"]).is_ok());
+    }
+
+    // --- enrich required args ---
+
+    #[test]
+    fn enrich_both_required_args_is_valid() {
+        assert!(
+            try_parse(&[
+                "prog",
+                "enrich",
+                "--input-enrich-file",
+                "access.jsonl",
+                "--input-enrich-ip",
+                "ip_address",
+            ])
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn enrich_missing_ip_field_is_invalid() {
+        assert!(try_parse(&["prog", "enrich", "--input-enrich-file", "access.jsonl"]).is_err());
+    }
+
+    #[test]
+    fn enrich_missing_file_is_invalid() {
+        assert!(try_parse(&["prog", "enrich", "--input-enrich-ip", "ip_address"]).is_err());
     }
 }

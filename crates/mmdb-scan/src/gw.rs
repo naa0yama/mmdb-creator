@@ -112,6 +112,8 @@ fn resolve_range<S: ::std::hash::BuildHasher>(
             host_ptr: None,
             measured_at,
             xlsx: None,
+            xlsx_matched: false,
+            gateway_found: false,
         };
     }
 
@@ -143,6 +145,8 @@ fn resolve_range<S: ::std::hash::BuildHasher>(
             host_ptr: None,
             measured_at,
             xlsx: None,
+            xlsx_matched: false,
+            gateway_found: false,
         };
     };
 
@@ -184,6 +188,8 @@ fn resolve_range<S: ::std::hash::BuildHasher>(
                 host_ptr: None,
                 measured_at,
                 xlsx: None,
+                xlsx_matched: false,
+                gateway_found: false,
             }
         }
         None => ScanGwRecord {
@@ -210,6 +216,8 @@ fn resolve_range<S: ::std::hash::BuildHasher>(
             host_ptr: None,
             measured_at,
             xlsx: None,
+            xlsx_matched: false,
+            gateway_found: false,
         },
     }
 }

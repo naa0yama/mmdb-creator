@@ -6,6 +6,43 @@ use anyhow::{Context as _, Result};
 use ipnet::IpNet;
 use mmdb_core::types::{AutNumData, WhoisData};
 
+/// Parse an IANA WHOIS response and return the delegation block and referral server.
+///
+/// IANA returns the top-level RIR assignment block (`inetnum`/`inet6num`) together with
+/// a `refer:` field pointing to the authoritative RIR WHOIS server. Both must be present
+/// for a valid result.
+///
+/// Returns `None` if either field is absent or the inetnum cannot be converted to [`IpNet`].
+#[must_use]
+pub fn parse_iana_response(response: &str) -> Option<(IpNet, String)> {
+    let mut block: Option<IpNet> = None;
+    let mut refer: Option<String> = None;
+
+    for line in response.lines() {
+        if line.starts_with('%') || line.starts_with('#') {
+            continue;
+        }
+        if let Some((key, value)) = line.split_once(':') {
+            let key = key.trim();
+            let value = value.trim();
+            match key {
+                "inetnum" | "inet6num" if block.is_none() => {
+                    block = inetnum_to_net(value);
+                }
+                "refer" if refer.is_none() && !value.is_empty() => {
+                    refer = Some(value.to_owned());
+                }
+                _ => {}
+            }
+        }
+        if block.is_some() && refer.is_some() {
+            break;
+        }
+    }
+
+    block.zip(refer)
+}
+
 /// Extract the `refer:` hostname from a whois response, if present.
 ///
 /// Returns the referral whois server hostname when the response contains a
@@ -462,6 +499,57 @@ netname: VALID\n";
     fn parse_rpsl_all_empty_input() {
         let results = parse_rpsl_all("");
         assert!(results.is_empty());
+    }
+
+    // ── parse_iana_response ───────────────────────────────────────────────────
+
+    #[test]
+    fn parse_iana_response_ipv4_range() {
+        let input = "\
+% IANA WHOIS server\n\
+\n\
+inetnum:      198.51.100.0 - 198.51.100.255\n\
+organisation: EXAMPLE-RIR\n\
+refer:        whois.example-rir.net\n";
+        let result = parse_iana_response(input).unwrap();
+        assert_eq!(result.0.to_string(), "198.51.100.0/24");
+        assert_eq!(result.1, "whois.example-rir.net");
+    }
+
+    #[test]
+    fn parse_iana_response_ipv6_cidr() {
+        let input = "\
+% IANA WHOIS server\n\
+\n\
+inet6num:     2001:db8::/32\n\
+organisation: EXAMPLE-RIR\n\
+refer:        whois.example-rir.net\n";
+        let result = parse_iana_response(input).unwrap();
+        assert_eq!(result.0.to_string(), "2001:db8::/32");
+        assert_eq!(result.1, "whois.example-rir.net");
+    }
+
+    #[test]
+    fn parse_iana_response_missing_refer_returns_none() {
+        let input = "inetnum: 198.51.100.0 - 198.51.100.255\norganisation: EXAMPLE-RIR\n";
+        assert!(parse_iana_response(input).is_none());
+    }
+
+    #[test]
+    fn parse_iana_response_missing_inetnum_returns_none() {
+        let input = "refer: whois.example-rir.net\n";
+        assert!(parse_iana_response(input).is_none());
+    }
+
+    #[test]
+    fn parse_iana_response_skips_comments() {
+        let input = "\
+% comment line\n\
+# another comment\n\
+inetnum: 198.51.100.0 - 198.51.100.255\n\
+refer:   whois.example-rir.net\n";
+        let result = parse_iana_response(input).unwrap();
+        assert_eq!(result.1, "whois.example-rir.net");
     }
 
     // ── parse_rpsl continuation lines ─────────────────────────────────────────

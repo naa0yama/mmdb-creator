@@ -18,8 +18,13 @@ pub async fn run(config: &Config, force: bool, ip: Option<&str>, full: bool) -> 
         .await
         .context("failed to rotate scanned.jsonl backup")?;
 
+    let scanning_cache_path = Path::new("data/cache/scan/scanning.jsonl");
+    backup::rotate_backup(scanning_cache_path, 5)
+        .await
+        .context("failed to rotate scanning.jsonl backup")?;
+
     if force {
-        cache::clear_file(Path::new("data/cache/scan/scanning.jsonl")).await?;
+        cache::clear_file(scanning_cache_path).await?;
     }
 
     // Load target CIDRs: from --ip flag, or merge whois-cidr.jsonl + xlsx-rows.jsonl.
@@ -65,7 +70,7 @@ pub async fn run(config: &Config, force: bool, ip: Option<&str>, full: bool) -> 
         &cidrs,
         mmdb_scan::ScanOptions {
             full,
-            cache_path: "data/cache/scan/scanning.jsonl".into(),
+            cache_path: scanning_cache_path.to_path_buf(),
         },
     )
     .await

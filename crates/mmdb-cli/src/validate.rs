@@ -403,8 +403,10 @@ mod tests {
     fn whois_config(server: &str) -> WhoisConfig {
         WhoisConfig {
             server: server.to_owned(),
+            auto_rir: false,
             timeout_sec: 10,
             asn: vec![],
+            ip: vec![],
             rate_limit_ms: 2000,
             max_retries: 3,
             initial_backoff_ms: 1000,

@@ -28,6 +28,10 @@ pub struct MmdbRecord {
     /// Data sourced from Excel (.xlsx) files.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub operational: Option<OperationalData>,
+    /// True when this record matched an xlsx row.
+    pub xlsx_matched: bool,
+    /// True when a gateway was successfully resolved.
+    pub gateway_found: bool,
 }
 
 /// GeoLite2-compatible continent field.
@@ -274,6 +278,12 @@ pub struct ScanGwRecord {
     /// xlsx row matched via PTR fields or CIDR lookup; absent when no match.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub xlsx: Option<serde_json::Value>,
+    /// True when this record matched an xlsx row.
+    #[serde(default)]
+    pub xlsx_matched: bool,
+    /// True when a gateway was successfully resolved.
+    #[serde(default)]
+    pub gateway_found: bool,
 }
 
 /// A single hop in a scamper icmp-paris trace.

@@ -33,6 +33,8 @@ pub fn to_mmdb_record(rec: &ScanGwRecord) -> MmdbRecord {
         whois,
         gateway,
         operational,
+        xlsx_matched: rec.xlsx.is_some(),
+        gateway_found: rec.gateway.status == "inservice",
     }
 }
 
@@ -211,6 +213,8 @@ mod tests {
                 "serviceid": "SVC-001",
                 "cableid": "C10001"
             })),
+            xlsx_matched: false,
+            gateway_found: false,
         }
     }
 
@@ -271,6 +275,43 @@ mod tests {
         rec.gateway.device = None;
         let mmdb = to_mmdb_record(&rec);
         assert!(mmdb.gateway.is_none());
+    }
+
+    #[test]
+    fn to_mmdb_record_xlsx_matched_true() {
+        // base_record has xlsx = Some(...) and status = "inservice"
+        let rec = base_record();
+        let mmdb = to_mmdb_record(&rec);
+        assert!(mmdb.xlsx_matched);
+        assert!(mmdb.gateway_found);
+    }
+
+    #[test]
+    fn to_mmdb_record_no_xlsx_gateway_inservice() {
+        let mut rec = base_record();
+        rec.xlsx = None;
+        let mmdb = to_mmdb_record(&rec);
+        assert!(!mmdb.xlsx_matched);
+        assert!(mmdb.gateway_found);
+    }
+
+    #[test]
+    fn to_mmdb_record_xlsx_some_gateway_no_ptr_match() {
+        let mut rec = base_record();
+        rec.gateway.status = "no_ptr_match".to_owned();
+        let mmdb = to_mmdb_record(&rec);
+        assert!(mmdb.xlsx_matched);
+        assert!(!mmdb.gateway_found);
+    }
+
+    #[test]
+    fn to_mmdb_record_no_xlsx_no_hops() {
+        let mut rec = base_record();
+        rec.xlsx = None;
+        rec.gateway.status = "no_hops".to_owned();
+        let mmdb = to_mmdb_record(&rec);
+        assert!(!mmdb.xlsx_matched);
+        assert!(!mmdb.gateway_found);
     }
 
     #[test]

@@ -85,7 +85,9 @@ data/
   scanned.jsonl             scan の最終出力 (range 集約済み ScanGwRecord、enrich 済)
   scanned.*.jsonl           上記のローテーションバックアップ
   output.jsonl              mmdb build の中間 NDJSON (mmdbctl 入力 / diff 確認用)
+  output.*.jsonl            上記のローテーションバックアップ
   output.mmdb               mmdb build が生成した MMDB バイナリ (デフォルト: data/output.mmdb)
+  output.*.mmdb             上記のローテーションバックアップ
 ```
 
 ## Merge Strategy

@@ -340,6 +340,8 @@ mod tests {
             host_ptr: None,
             measured_at: None,
             xlsx: None,
+            xlsx_matched: false,
+            gateway_found: false,
         }
     }
 

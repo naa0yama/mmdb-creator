@@ -20,7 +20,7 @@ Startup validation は全サブコマンド実行前に自動で行われる。
 Checks performed in order:
 
 1. Config file exists and parses as valid TOML
-2. Required fields are present (`[whois].server`)
+2. `[whois].server` is not empty (has a serde default of `"whois.iana.org"`; fails only if explicitly set to blank)
 3. `[[sheets]]` entries (if present):
    - `filename` exists on disk
    - `header_row` >= 1
