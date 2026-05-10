@@ -181,7 +181,7 @@ fn inspect_sheets_returns_sheet_names_and_headers() {
         header_row: 3,
         columns: vec![], // inspect_sheets doesn't need columns
     };
-    let sheets = inspect_sheets(&config).unwrap();
+    let sheets = inspect_sheets(&config, false).unwrap();
     assert_eq!(sheets.len(), 2);
     let names: Vec<&str> = sheets.iter().map(|s| s.name.as_str()).collect();
     assert!(names.contains(&"border1.ty1"));
@@ -191,6 +191,10 @@ fn inspect_sheets_returns_sheet_names_and_headers() {
         assert!(sheet.headers.len() >= 10);
         assert!(sheet.headers.contains(&"site".to_owned()));
         assert!(sheet.headers.contains(&"DEMARC addresses".to_owned()));
+        assert!(
+            sheet.preview_rows.is_empty(),
+            "preview=false should yield no preview rows"
+        );
     }
 }
 

@@ -18,6 +18,7 @@ use mmdb_scan::ptr_parse::{self, CompiledPattern};
 /// - each `sheets[n].filename` exists on disk
 /// - each `sheets[n].header_row >= 1`
 /// - column names within each sheet are unique
+/// - each `sheets[n].columns[m].name` contains only `[a-z0-9_]`
 /// - each `sheets[n].columns[m].ptr_field` references a key in `normalize`
 /// - each `normalize.<name>.rules[k].pattern` is a valid regex
 /// - each `{name}` placeholder in `scan.ptr_patterns[k].regex` exists in `normalize`
@@ -50,6 +51,12 @@ fn collect_config_errors(config: &Config) -> Vec<String> {
                 if !seen.insert(col.name.as_str()) {
                     errors.push(format!(
                         "sheets[{idx}].columns: duplicate name '{}'",
+                        col.name
+                    ));
+                }
+                if !col.name.chars().all(is_snake_case_char) {
+                    errors.push(format!(
+                        "sheets[{idx}].columns '{}': name must contain only [a-z0-9_]",
                         col.name
                     ));
                 }
@@ -269,28 +276,31 @@ pub fn run(config: &Config, init_sheets: bool) -> Result<()> {
     println!("✓ config is valid");
 
     if init_sheets {
-        print_init_sheets(config);
+        print_init_sheets(config)?;
     }
 
     Ok(())
 }
 
 /// Emit a TOML scaffold for all `[[sheets]]` entries to stdout.
+///
+/// Returns `Err` if any generated `name` contains non-ASCII characters.
 // NOTEST(io): calls mmdb_xlsx::inspect_sheets (Excel file I/O) and writes to stdout
 #[cfg_attr(coverage_nightly, coverage(off))]
 #[allow(clippy::print_stdout)]
-fn print_init_sheets(config: &Config) {
+fn print_init_sheets(config: &Config) -> Result<()> {
     let sheets = match config.sheets.as_deref() {
         None | Some([]) => {
             tracing::warn!("no [[sheets]] entries found; nothing to scaffold");
             println!("warning: no [[sheets]] entries found; nothing to scaffold");
-            return;
+            return Ok(());
         }
         Some(s) => s,
     };
+    let mut init_errors = Vec::new();
 
     for sheet_config in sheets {
-        let sheet_infos = match mmdb_xlsx::inspect_sheets(sheet_config) {
+        let sheet_infos = match mmdb_xlsx::inspect_sheets(sheet_config, true) {
             Ok(v) => v,
             Err(e) => {
                 tracing::warn!(
@@ -326,16 +336,39 @@ fn print_init_sheets(config: &Config) {
         println!("excludes_sheets = {excludes_toml}");
 
         let mut seen_headers: std::collections::HashSet<String> = std::collections::HashSet::new();
+        // REASON: header_row is u32; usize is >= u32 on all supported targets.
+        #[allow(clippy::as_conversions)]
+        let header_row_usize = sheet_config.header_row as usize;
 
         for sheet_info in &sheet_infos {
             println!();
             println!("# --- Sheet: {} ---", sheet_info.name);
+
+            if !sheet_info.preview_rows.is_empty() {
+                let end_row = header_row_usize
+                    .saturating_add(sheet_info.preview_rows.len())
+                    .saturating_sub(1);
+                println!(
+                    "# Rows {}–{} (header_row = {}):",
+                    sheet_config.header_row, end_row, sheet_config.header_row
+                );
+                for (offset, row) in sheet_info.preview_rows.iter().enumerate() {
+                    let row_num = header_row_usize.saturating_add(offset);
+                    let cells = row.join(" | ");
+                    println!("#   row {row_num} | {cells}");
+                }
+            }
 
             for header in &sheet_info.headers {
                 if !seen_headers.insert(header.clone()) {
                     continue;
                 }
                 let name = to_snake_case(header);
+                if !name.chars().all(is_snake_case_char) {
+                    init_errors.push(format!(
+                        "generated name '{name}' (from header '{header}') contains characters outside [a-z0-9_]"
+                    ));
+                }
                 println!();
                 println!("[[sheets.columns]]");
                 println!("name = \"{name}\"");
@@ -344,11 +377,26 @@ fn print_init_sheets(config: &Config) {
             }
         }
     }
+    if !init_errors.is_empty() {
+        println!("--init-sheets validation failed:");
+        for e in &init_errors {
+            println!("  - {e}");
+        }
+        return Err(anyhow::anyhow!(
+            "--init-sheets generated invalid column names"
+        ));
+    }
+    Ok(())
 }
 
 // -------------------------------------------------------------------------------------------------
 // Helpers
 // -------------------------------------------------------------------------------------------------
+
+/// Return `true` if `c` is a valid `snake_case` character: `[a-z0-9_]`.
+const fn is_snake_case_char(c: char) -> bool {
+    matches!(c, 'a'..='z' | '0'..='9' | '_')
+}
 
 /// Convert a column header string to `snake_case`.
 ///
@@ -547,6 +595,54 @@ mod tests {
             ..base_config()
         };
         assert!(collect_config_errors(&cfg).is_empty());
+    }
+
+    #[test]
+    fn non_ascii_column_name_is_an_error() {
+        let cfg = Config {
+            sheets: Some(vec![SheetConfig {
+                columns: vec![col("日本語")],
+                ..sheet(".", 1)
+            }]),
+            ..base_config()
+        };
+        let errors = collect_config_errors(&cfg);
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("name must contain only [a-z0-9_]")),
+            "expected non-ASCII name error in {errors:?}"
+        );
+    }
+
+    #[test]
+    fn ascii_column_name_is_valid() {
+        let cfg = Config {
+            sheets: Some(vec![SheetConfig {
+                columns: vec![col("valid_name_01")],
+                ..sheet(".", 1)
+            }]),
+            ..base_config()
+        };
+        assert!(collect_config_errors(&cfg).is_empty());
+    }
+
+    #[test]
+    fn mixed_ascii_non_ascii_column_name_is_an_error() {
+        let cfg = Config {
+            sheets: Some(vec![SheetConfig {
+                columns: vec![col("region_日本")],
+                ..sheet(".", 1)
+            }]),
+            ..base_config()
+        };
+        let errors = collect_config_errors(&cfg);
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("name must contain only [a-z0-9_]")),
+            "expected non-ASCII name error in {errors:?}"
+        );
     }
 
     #[test]

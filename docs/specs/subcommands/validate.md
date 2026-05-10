@@ -25,6 +25,7 @@ Checks performed in order:
    - `filename` exists on disk
    - `header_row` >= 1
    - `columns` have unique `name` values
+   - `columns[m].name` contains only `[a-z0-9_]` (ASCII lowercase, digits, underscore)
    - `columns` have valid `col_type` values (enforced by serde)
 4. `[[sheets.columns]]` `ptr_field` values exist in `Config.normalize`
 5. `{name}` placeholders in `[[scan.ptr_patterns]]` exist in `Config.normalize`
@@ -39,16 +40,22 @@ For each `[[sheets]]` entry in config.toml:
 
 1. Open the xlsx file with calamine (via `mmdb_xlsx::inspect_sheets`)
 2. Get all sheet names; filter out `excludes_sheets`
-3. For each remaining sheet: read the header row, collect all non-empty column headers
+3. For each remaining sheet: read the header row, collect all non-empty column headers;
+   also collect up to 3 rows of raw cell text (header row + 2 data rows) for preview
 4. Deduplicate column headers across all sheets in the same file
-5. Print to stdout as TOML:
+5. Print to stdout as TOML, with a per-sheet preview block before the column scaffold:
 
 ```toml
 [[sheets]]
 filename = "data/exsample/IPAM_20260401r2.xlsx"
 header_row = 3
 excludes_sheets = []
-# Available sheets: ["border1.ty1"]
+
+# --- Sheet: border1.ty1 ---
+# Rows 3–5 (header_row = 3):
+#   row 3 | Site     | Floor | IP Address    |
+#   row 4 | EXAMPLE  | 1F    | 198.51.100.0  |
+#   row 5 | EXAMPLE  | 2F    | 198.51.100.10 |
 
 [[sheets.columns]]
 name = "site"
@@ -68,6 +75,17 @@ Column output rules:
 - `name` = snake_case version of `sheet_name` (lowercase, spaces→underscores, hyphens→underscores)
 - `sheet_name` = original header text from xlsx
 - `type` = always `"string"` (user edits manually to integer/addresses/bool)
+- If any generated `name` contains characters outside `[a-z0-9_]` (e.g. Japanese headers),
+  all such names are reported and the command exits non-zero. The user must rename the xlsx
+  column headers to ASCII before re-running.
+
+Preview block rules:
+
+- Printed as comment lines immediately after `# --- Sheet: <name> ---`.
+- Shows `header_row` through `header_row + 2` (up to 3 rows; capped if the sheet is shorter).
+- Row numbers are 1-indexed and match the `header_row` setting so users can verify alignment.
+- All columns (including empty cells) are included so column positions are visible.
+- Missing rows (sheet has fewer rows than expected) are omitted without error.
 
 ---
 
@@ -190,16 +208,28 @@ crates/mmdb-cli/src/validate.rs
 pub struct SheetInfo {
     pub name: String,
     pub headers: Vec<String>,
+    /// Raw cell text for up to 3 rows starting at `header_row` (header + 2 data rows).
+    /// All columns including empty cells are included so column positions are visible.
+    /// Empty when `inspect_sheets` was called with `preview = false`.
+    pub preview_rows: Vec<Vec<String>>,
 }
 
-pub fn inspect_sheets(config: &SheetConfig) -> Result<Vec<SheetInfo>>;
+pub fn inspect_sheets(config: &SheetConfig, preview: bool) -> Result<Vec<SheetInfo>>;
 ```
 
 ### snake_case conversion
 
 ```rust
 fn to_snake_case(s: &str) -> String {
-    s.trim().to_lowercase().replace(' ', "_").replace('-', "_")
+    s.trim()
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '_' })
+        .collect::<String>()
+        .split('_')
+        .filter(|p| !p.is_empty())
+        .collect::<Vec<_>>()
+        .join("_")
 }
 ```
 

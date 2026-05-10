@@ -26,6 +26,10 @@ pub struct SheetInfo {
     pub name: String,
     /// Column header texts from the configured header row (non-empty cells only).
     pub headers: Vec<String>,
+    /// Raw cell text for up to 3 rows starting at `header_row` (header + 2 data rows).
+    /// All columns including empty cells are included so column positions are visible.
+    /// Empty when `inspect_sheets` was called with `preview = false`.
+    pub preview_rows: Vec<Vec<String>>,
 }
 
 /// A single typed cell value produced from an Excel cell.
@@ -121,12 +125,16 @@ pub fn read_xlsx(config: &SheetConfig) -> anyhow::Result<Vec<SheetResult>> {
 /// Open an xlsx file and return sheet names + header columns for each sheet.
 ///
 /// Filtered by `config.excludes_sheets`. Header row is `config.header_row`
-/// (1-indexed). Returns one `SheetInfo` per processed sheet.
+/// (1-indexed). Returns one [`SheetInfo`] per processed sheet.
+///
+/// When `preview` is `true`, each [`SheetInfo`] also includes up to 3 rows of
+/// raw cell text (the header row plus up to 2 data rows below it) in
+/// [`SheetInfo::preview_rows`].
 ///
 /// # Errors
 ///
 /// Returns an error if the file cannot be opened or no sheets remain after filtering.
-pub fn inspect_sheets(config: &SheetConfig) -> anyhow::Result<Vec<SheetInfo>> {
+pub fn inspect_sheets(config: &SheetConfig, preview: bool) -> anyhow::Result<Vec<SheetInfo>> {
     let mut wb: Xlsx<_> = open_workbook(&config.filename)
         .with_context(|| format!("failed to open {}", config.filename.display()))?;
 
@@ -150,9 +158,10 @@ pub fn inspect_sheets(config: &SheetConfig) -> anyhow::Result<Vec<SheetInfo>> {
             .worksheet_range(name)
             .with_context(|| format!("failed to read sheet '{name}'"))?;
 
-        let headers: Vec<std::string::String> = range
-            .rows()
-            .nth(header_row_idx)
+        let all_rows: Vec<&[Data]> = range.rows().collect();
+
+        let headers: Vec<std::string::String> = all_rows
+            .get(header_row_idx)
             .map(|row| {
                 row.iter()
                     .filter_map(|cell| match cell {
@@ -163,9 +172,16 @@ pub fn inspect_sheets(config: &SheetConfig) -> anyhow::Result<Vec<SheetInfo>> {
             })
             .unwrap_or_default();
 
+        let preview_rows = if preview {
+            collect_preview_rows(&all_rows, header_row_idx)
+        } else {
+            Vec::new()
+        };
+
         result.push(SheetInfo {
             name: name.clone(),
             headers,
+            preview_rows,
         });
     }
 
@@ -388,6 +404,22 @@ fn parse_cell(data: &Data, col_type: &ColumnType) -> anyhow::Result<CellValue> {
     }
 }
 
+/// Collect up to 3 rows starting at `header_row_idx` as raw cell text.
+///
+/// All columns are included (empty cells become `""`). Used to populate
+/// [`SheetInfo::preview_rows`] when `inspect_sheets` is called with `preview = true`.
+fn collect_preview_rows(rows: &[&[Data]], header_row_idx: usize) -> Vec<Vec<std::string::String>> {
+    rows.iter()
+        .skip(header_row_idx)
+        .take(3)
+        .map(|row| {
+            row.iter()
+                .map(|cell| cell_to_string(cell).unwrap_or_default())
+                .collect()
+        })
+        .collect()
+}
+
 /// Extract a plain string from a [`Data`] cell, returning `None` for empty cells.
 fn cell_to_string(data: &Data) -> Option<std::string::String> {
     match data {
@@ -412,12 +444,12 @@ fn cell_to_string(data: &Data) -> Option<std::string::String> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::indexing_slicing, clippy::unwrap_used)]
 
     use calamine::Data;
     use ipnet::IpNet;
 
-    use super::{CellValue, ColumnType, parse_cell};
+    use super::{CellValue, ColumnType, collect_preview_rows, parse_cell};
 
     // ---- parse_cell: String ----
 
@@ -529,5 +561,49 @@ mod tests {
         assert_eq!(header_map.get("Age"), Some(&1));
         assert_eq!(header_map.get("IP"), Some(&2));
         assert_eq!(header_map.get("Missing"), None);
+    }
+
+    // ---- collect_preview_rows ----
+
+    fn make_row(cells: &[&str]) -> Vec<Data> {
+        cells
+            .iter()
+            .map(|s| Data::String((*s).to_owned()))
+            .collect()
+    }
+
+    #[test]
+    fn preview_rows_returns_header_plus_two_data_rows() {
+        let r0 = make_row(&["title1", "title2"]);
+        let r1 = make_row(&["hdr_a", "hdr_b"]); // header_row_idx = 1
+        let r2 = make_row(&["val1", "val2"]);
+        let r3 = make_row(&["val3", "val4"]);
+        let r4 = make_row(&["val5", "val6"]);
+        let rows: Vec<&[Data]> = vec![&r0, &r1, &r2, &r3, &r4];
+        let preview = collect_preview_rows(&rows, 1);
+        assert_eq!(preview.len(), 3);
+        assert_eq!(preview[0], vec!["hdr_a", "hdr_b"]);
+        assert_eq!(preview[1], vec!["val1", "val2"]);
+        assert_eq!(preview[2], vec!["val3", "val4"]);
+    }
+
+    #[test]
+    fn preview_rows_capped_when_sheet_is_short() {
+        let r0 = make_row(&["hdr_a", "hdr_b"]); // header_row_idx = 0
+        let r1 = make_row(&["val1", "val2"]);
+        let rows: Vec<&[Data]> = vec![&r0, &r1];
+        let preview = collect_preview_rows(&rows, 0);
+        assert_eq!(preview.len(), 2);
+        assert_eq!(preview[0], vec!["hdr_a", "hdr_b"]);
+        assert_eq!(preview[1], vec!["val1", "val2"]);
+    }
+
+    #[test]
+    fn preview_rows_empty_cells_become_empty_string() {
+        let r0 = make_row(&["hdr_a"]);
+        let r1: Vec<Data> = vec![Data::Empty, Data::String("val".to_owned())];
+        let rows: Vec<&[Data]> = vec![&r0, &r1];
+        let preview = collect_preview_rows(&rows, 0);
+        assert_eq!(preview[1], vec!["", "val"]);
     }
 }
