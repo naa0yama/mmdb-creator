@@ -11,9 +11,11 @@ ARG DEBIAN_FRONTEND=noninteractive \
 ## renovate: datasource=github-releases packageName=rui314/mold versioning=semver automerge=true
 ARG MOLD_VERSION=v2.41.0
 
+# graft:keep-start
 ## renovate: datasource=github-releases packageName=ipinfo/mmdbctl versioning=semver extractVersion=^mmdbctl-(?<version>.+)$ automerge=true
 ARG MMDBCTL_VERSION=1.4.10
 
+# graft:keep-end
 # Rust tools
 ## renovate: datasource=github-releases packageName=mozilla/sccache versioning=semver automerge=true
 ARG SCCACHE_VERSION=v0.15.0
@@ -28,7 +30,6 @@ ARG CURL_OPTS="-sfSL --retry 3 --retry-delay 2 --retry-connrefused"
 FROM --platform=$BUILDPLATFORM rust:1.94.1-trixie@sha256:652612f07bfbbdfa3af34761c1e435094c00dde4a98036132fca28c7bb2b165c AS builder-base
 ARG CURL_OPTS \
 	DEBIAN_FRONTEND \
-	MMDBCTL_VERSION \
 	MOLD_VERSION \
 	SCCACHE_VERSION \
 	USER_NAME \
@@ -36,6 +37,9 @@ ARG CURL_OPTS \
 	USER_GID \
 	TZ
 
+# graft:keep-start
+ARG MMDBCTL_VERSION
+# graft:keep-end
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
 
 SHELL [ "/bin/bash", "-c" ]
@@ -82,7 +86,6 @@ RUN echo "**** mmdbctl ****" && \
 	curl ${CURL_OPTS} "https://github.com/ipinfo/mmdbctl/releases/download/mmdbctl-${MMDBCTL_VERSION}/deb.sh" | sh
 
 # graft:keep-end
-
 RUN echo "**** Create user ****" && \
 	set -euxo pipefail && \
 	groupadd --gid "${USER_GID}" "${USER_NAME}" && \
@@ -216,7 +219,7 @@ case ":$PATH:" in
 	*) export PATH="$HOME/.local/bin:$PATH" ;;
 esac
 export XDG_RUNTIME_DIR="/run/user/$(id -u)"
-export GPG_TTY=$(tty 2>/dev/null || true)
+export GPG_TTY="$(tty 2>/dev/null || true)"
 alias cc="claude --dangerously-skip-permissions"
 
 _DOC_
