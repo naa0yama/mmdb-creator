@@ -1,13 +1,15 @@
-# Boilerplate-Rust
+# mmdb-creator
 
-![coverage](https://raw.githubusercontent.com/naa0yama/boilerplate-rust/badges/coverage.svg)
-![test execution time](https://raw.githubusercontent.com/naa0yama/boilerplate-rust/badges/time.svg)
+![coverage](https://raw.githubusercontent.com/naa0yama/mmdb-creator/badges/coverage.svg)
+![test execution time](https://raw.githubusercontent.com/naa0yama/mmdb-creator/badges/time.svg)
 
-Rust プロジェクトのための開発テンプレート
+XLSX / WHOIS データからカスタム MaxMind DB (MMDB) ファイルを生成するネットワークデータパイプラインツール
 
 ## 概要
 
-このプロジェクトは、Rust 開発を始めるためのボイラープレートです。Dev Containers に対応しており、VS Code での開発環境が簡単に構築できます。
+ASN または CIDR リストを WHOIS / Excel ファイルからインポートし、`scamper` で ICMP traceroute プローブをかけ、デマーク・ゲートウェイ情報を付与した MMDB を生成します。生成した MMDB はログエンリッチメント (`enrich`) にそのまま利用できます。
+
+Dev Containers に対応しており、VS Code または devcontainer CLI での開発環境が簡単に構築できます。
 
 ## 必要要件
 
@@ -32,7 +34,7 @@ Rust プロジェクトのための開発テンプレート
 
 ```bash
 git clone <repository-url>
-cd boilerplate-rust
+cd mmdb-creator
 ```
 
 2. VS Codeでプロジェクトを開く:
@@ -98,40 +100,82 @@ traefik ルーティングを自動設定します。起動後に以下の形式
 http://p<port>.<branch>.<project>.localhost:8080
 ```
 
-例 (ポート `5080`、ブランチ `feature/add-auth`、プロジェクト `boilerplate-rust`):
+例 (ポート `5080`、ブランチ `feature/add-auth`、プロジェクト `mmdb-creator`):
 
 ```
-http://p5080.feature-add-auth.boilerplate-rust.localhost:8080
+http://p5080.feature-add-auth.mmdb-creator.localhost:8080
 ```
 
 ### 複数 worktree での利用
 
 ```bash
 # 1つ目の worktree
-cd /path/to/boilerplate-rust
+cd /path/to/mmdb-creator
 mise run dev:up
-# -> http://p5080.main.boilerplate-rust.localhost:8080
+# -> http://p5080.main.mmdb-creator.localhost:8080
 
 # 2つ目の worktree (別ブランチ)
-cd /path/to/boilerplate-rust-feat
+cd /path/to/mmdb-creator-feat
 mise run dev:up
-# -> http://p5080.feature-x.boilerplate-rust.localhost:8080
+# -> http://p5080.feature-x.mmdb-creator.localhost:8080
 ```
 
 ブランチ名は DNS ラベル形式 (小文字英数字とハイフン、63文字以内) に自動変換されます。
 
-## オプションツール
+## CLI 使い方
 
-`codeql` など普段使わないツールは `.mise/tools.optional.toml` で管理しています。
-必要な時だけ明示的にインストールします:
+### データパイプライン
 
-```bash
-mise install --config-file .mise/tools.optional.toml
+```
+validate --init-sheets    # config.toml に [[sheets.columns]] のひな形を生成
+        ↓
+import                    # WHOIS / XLSX からデータを取り込み
+        ↓
+scan                      # scamper で CIDR をプローブ
+        ↓
+mmdb build                # scanned.jsonl から .mmdb を生成
+        ↓
+enrich                    # アクセスログを .mmdb でエンリッチ
 ```
 
-## 使い方
+### サブコマンド
 
-すべてのタスクは `mise run <task>` で実行します。
+| コマンド                  | 説明                               | 主なフラグ                                     |
+| ------------------------- | ---------------------------------- | ---------------------------------------------- |
+| `mmdb-creator validate`   | 設定検証・シート列スキャフォールド | `--init-sheets` `--ptr` `--xlsx-rows`          |
+| `mmdb-creator import`     | WHOIS / XLSX データ取り込み        | `--asn` `--ip` `--xlsx` `--whois` `--force`    |
+| `mmdb-creator scan`       | scamper で CIDR プローブ           | `--ip` `--full` `--force`                      |
+| `mmdb-creator mmdb build` | MMDB ビルド                        | `-o` (出力先) `-i` (入力 JSONL)                |
+| `mmdb-creator mmdb query` | MMDB 検索 (エイリアス: `mmdb q`)   | `-m` (MMDB パス) `<IPS>...`                    |
+| `mmdb-creator enrich`     | JSONL ログを MMDB でエンリッチ     | `--input-enrich-file` `--input-enrich-ip` `-m` |
+
+### 実行例
+
+```bash
+# 1. シート列定義のひな形を生成して config.toml に追記
+mmdb-creator validate --init-sheets
+
+# 2. データ取り込み (WHOIS + XLSX)
+mmdb-creator import
+
+# 3. CIDR プローブ
+mmdb-creator scan
+
+# 4. MMDB 生成
+mmdb-creator mmdb build
+
+# 5. IP 検索
+mmdb-creator mmdb query 198.51.100.1
+
+# 6. アクセスログエンリッチ
+mmdb-creator enrich \
+  --input-enrich-file access.jsonl \
+  --input-enrich-ip src_ip
+```
+
+## 使い方 (開発タスク)
+
+すべての開発タスクは `mise run <task>` で実行します。
 
 ### 基本操作
 
@@ -176,15 +220,13 @@ mise run pre-commit       # clean:sweep + fmt:check + clippy:strict + ast-grep +
 │   └── pre-push                # プッシュ前チェック
 ├── .github/                    # GitHub Actions & 設定
 │   ├── actions/                # カスタムアクション
-│   ├── graft/                  # graft マニフェスト (テンプレートリポジトリからのファイル同期設定)
 │   ├── workflows/              # CI/CD ワークフロー
 │   ├── labeler.yml
 │   ├── project-config.json         # CI/リリース設定 (ビルドターゲット・タイムアウト・apt パッケージ等)
 │   └── release.yml
 ├── .mise/                      # mise タスク定義
-│   ├── tasks.toml              # 共通タスク定義 (boilerplate から管理)
-│   ├── overrides.toml          # プロジェクト固有のタスク上書き
-│   └── tools.optional.toml     # オプションツール定義 (mise install --config-file で個別インストール)
+│   ├── tasks.toml              # 共通タスク定義
+│   └── overrides.toml          # プロジェクト固有のタスク上書き
 ├── .vscode/                    # VS Code設定
 │   ├── launch.json             # デバッグ設定
 │   └── settings.json           # ワークスペース設定
