@@ -1,0 +1,48 @@
+# - -------------------------------------------------------------------------------------------------
+# - Package
+# -
+[package]
+name = "mmdb-scan"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "mmdb_scan"
+path = "src/lib.rs"
+
+# - -------------------------------------------------------------------------------------------------
+# - Dependencies
+# -
+[dependencies]
+# Internal crates
+mmdb-core.workspace = true
+mmdb-dns.workspace = true
+mmdb-xlsx.workspace = true
+
+# Core
+anyhow.workspace = true
+tokio.workspace = true
+
+# Data
+chrono.workspace = true
+indexmap.workspace = true
+ipnet.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+# Logging
+tracing.workspace = true
+
+# - -------------------------------------------------------------------------------------------------
+# - Dev Dependencies
+# -
+[dev-dependencies]
+tempfile.workspace = true
+
+# - -------------------------------------------------------------------------------------------------
+# - Lints
+# -
+[lints]
+workspace = true

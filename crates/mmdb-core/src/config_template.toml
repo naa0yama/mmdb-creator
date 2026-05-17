@@ -1,0 +1,176 @@
+# mmdb-creator configuration
+
+# ──────────────────────────────────────────────────────────────────────────────
+# WHOIS
+# ──────────────────────────────────────────────────────────────────────────────
+[whois]
+# Automatically select the authoritative RIR WHOIS server via whois.iana.org (default: true).
+# Set to false to use the server field below unconditionally.
+# auto_rir = true
+
+# Fallback WHOIS server when auto_rir = false or IANA lookup fails (TCP port 43).
+# When auto_rir = true (default), this field is only used as a fallback.
+# server = "whois.iana.org"
+
+# ASN numbers to query when --asn is not given on the CLI
+# asn = [64496, 64497]
+
+# IP/CIDR prefixes to query directly when --ip is not given on the CLI.
+# Runs independently alongside the ASN loop; both can be active at the same time.
+# ip = ["198.51.100.0/24", "2001:db8::/32"]
+
+# Directory for REST API response caches (RIPE Stat per-ASN)
+cache_dir = "data/cache/import"
+
+# Cache TTL in seconds (default: 604800 = 7 days)
+# cache_ttl_secs = 604800
+
+# TCP 43 query delay in milliseconds between consecutive queries (default: 2000)
+# rate_limit_ms = 2000
+
+# HTTP retry settings (mirrors curl --retry / --retry-delay)
+# http_max_retries = 3
+# http_retry_delay_secs = 2
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Sheets
+# ──────────────────────────────────────────────────────────────────────────────
+# [[sheets]]
+# filename = "IPAM.xlsx"
+# header_row = 3
+# excludes_sheets = ["Power"]
+#
+# [[sheets.columns]]
+# name = "host"
+# sheet_name = "host"
+# type = "string"
+# ptr_field = "device"      # links this column to the PTR capture group "device"
+#
+# [[sheets.columns]]
+# name = "site"
+# sheet_name = "site"
+# type = "string"
+# ptr_field = "facility"    # links this column to the PTR capture group "facility"
+#
+# [[sheets.columns]]
+# name = "port"
+# sheet_name = "port"
+# type = "string"
+# ptr_field = "interface"   # links this column to the PTR capture group "interface"
+#
+# [[sheets.columns]]
+# name = "network"
+# sheet_name = "Network"
+# type = "addresses"        # CIDR list; used as scan targets
+#
+# [[sheets.columns]]
+# name = "serviceid"
+# sheet_name = "ServiceID"
+# type = "string"           # no ptr_field = payload-only column
+#
+# # Aggregate multiple address columns into one field (type = "addresses" only).
+# # All listed columns are merged and deduplicated at CIDR level.
+# # sheet_names and sheet_name are mutually exclusive.
+# [[sheets.columns]]
+# name = "lan_addresses"
+# sheet_names = ["LAN Address 1", "LAN Address 2", "LAN Address 3"]
+# type = "addresses"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Scan
+# ──────────────────────────────────────────────────────────────────────────────
+# [scan]
+# scamper global packets-per-second limit (default: 50)
+# pps = 50
+#
+# Probes per hop sent by scamper -q (default: 3)
+# probes = 3
+#
+# Maximum concurrent targets submitted to scamper (default: 200)
+# window = 200
+#
+# Flush scan.jsonl writer buffer after this many records (default: 100)
+# flush_count = 100
+#
+# Flush scan.jsonl writer buffer after this many seconds (default: 5)
+# flush_interval_sec = 5
+#
+# Maximum concurrent DNS lookups for PTR enrichment (default: 10)
+# dns_concurrency = 10
+#
+# DNS-over-HTTPS server: "cloudflare" (default) | "google" | "quad9"
+# doh_server = "cloudflare"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Normalisation pipelines for PTR-to-xlsx field matching.
+#
+# Each [normalize.<name>] entry defines rules applied to both the PTR-captured
+# value and the corresponding xlsx column value before comparison.
+# The key name must match both a PTR capture group and a ptr_field value.
+# ──────────────────────────────────────────────────────────────────────────────
+#
+# [normalize.interface]
+# # Regex substitution rules to convert PTR-captured interface names to a
+# # DNS-safe normalised form.  Longer/more-specific patterns MUST precede
+# # shorter ones that are substrings.  Use `validate --ptr` to discover which
+# # PTR hostnames remain unmatched and add rules incrementally.
+# rules = [
+#   { pattern = '/', replacement = "-" },
+#   { pattern = '\.', replacement = "-" },
+# ]
+# case = "lower"    # "lower" (default) | "upper" | "none"
+# # Regex patterns matched against the normalised captured value; matched entries are suppressed in `validate --ptr`.
+# # Example: excludes = ['^lo\d*$', '^mgmt\d*$']
+# excludes = []
+#
+# [normalize.device]
+# case = "lower"
+# # Regex patterns matched against the normalised captured value; matched entries are suppressed in `validate --ptr`.
+# excludes = []
+#
+# [normalize.facility]
+# case = "lower"
+# # Regex patterns matched against the normalised captured value; matched entries are suppressed in `validate --ptr`.
+# excludes = []
+
+# PTR hostname patterns used to identify backbone network devices.
+# Entries are evaluated in definition order; the first match wins.
+# Each entry requires a `regex` field with named capture groups.
+# Supported group names (all optional):
+#   interface    — interface name, e.g. "xe-0-0-1"
+#   device       — full device identifier, e.g. "rtr0101"
+#   device_role  — role portion of the device name, e.g. "rtr"
+#   facility     — site or facility name, e.g. "dc01"
+#   facing       — raw prefix label ("user", "virtual", "user.virtual")
+#   customer_asn — BGP ASN as a decimal string (parsed to u32 in output)
+#
+# Option A: {placeholder} syntax — each {name} expands to (?P<name>[^.]+)
+# [[scan.ptr_patterns]]
+# domain = "example.net"
+# regex = "{interface}.{device}.{facility}"
+# # → ^(?P<interface>[^.]+)\.(?P<device>[^.]+)\.(?P<facility>[^.]+)\.example\.net$
+# # Regex patterns applied to the full PTR hostname; matched entries are suppressed in `validate --ptr`.
+# # Example: excludes = ['\.ad\.example\.net$', '\.transit\.example\.net$']
+# excludes = []
+#
+# Option B: raw regex (backward-compatible; no {placeholder} expansion)
+# [[scan.ptr_patterns]]
+# domain = "example.ad.jp"
+# regex = '''(?x)
+#   ^(?:(?P<facing>user(?:\.virtual)?|virtual)\.)?
+#   (?:as(?P<customer_asn>\d+)\.)?
+#   (?P<interface>(?:ge|xe|et)-[\d-]+)
+#   (?:\.[a-z]+\d+)?\.
+#   (?P<device>(?P<device_role>[a-z]+)\d+)\.
+#   (?P<facility>[a-z0-9]+)\.
+#   example\.ad\.jp$
+# '''
+# excludes = []
+
+# ──────────────────────────────────────────────────────────────────────────────
+# MMDB
+# ──────────────────────────────────────────────────────────────────────────────
+# Shared MMDB path used by mmdb build (output), mmdb query, and enrich (input).
+# Override per-invocation with --out / --mmdb CLI flags.
+# [mmdb]
+# path = "data/output.mmdb"

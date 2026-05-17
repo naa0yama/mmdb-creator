@@ -8,19 +8,19 @@
 			"type": "lldb",
 			"request": "launch",
 			// graft:keep-start
-			"name": "Debug executable 'brust'",
+			"name": "Debug executable 'mmdb-creator'",
 			// graft:keep-end
 			"cargo": {
 				"args": [
 					"build",
 					// graft:keep-start
-					"--bin=brust",
-					"--package=brust"
+					"--bin=mmdb-creator",
+					"--package=mmdb-creator"
 					// graft:keep-end
 				],
 				"filter": {
 					// graft:keep-start
-					"name": "brust",
+					"name": "mmdb-creator",
 					// graft:keep-end
 					"kind": "bin"
 				}
@@ -32,20 +32,20 @@
 			"type": "lldb",
 			"request": "launch",
 			// graft:keep-start
-			"name": "Debug unit tests in executable 'brust'",
+			"name": "Debug unit tests in executable 'mmdb-creator'",
 			// graft:keep-end
 			"cargo": {
 				"args": [
 					"test",
 					"--no-run",
 					// graft:keep-start
-					"--bin=brust",
-					"--package=brust"
+					"--bin=mmdb-creator",
+					"--package=mmdb-creator"
 					// graft:keep-end
 				],
 				"filter": {
 					// graft:keep-start
-					"name": "brust",
+					"name": "mmdb-creator",
 					// graft:keep-end
 					"kind": "bin"
 				}

@@ -11,6 +11,11 @@ ARG DEBIAN_FRONTEND=noninteractive \
 ## renovate: datasource=github-releases packageName=rui314/mold versioning=semver automerge=true
 ARG MOLD_VERSION=v2.41.0
 
+# graft:keep-start
+## renovate: datasource=github-releases packageName=ipinfo/mmdbctl versioning=semver extractVersion=^mmdbctl-(?<version>.+)$ automerge=true
+ARG MMDBCTL_VERSION=1.4.10
+
+# graft:keep-end
 # Rust tools
 ## renovate: datasource=github-releases packageName=mozilla/sccache versioning=semver automerge=true
 ARG SCCACHE_VERSION=v0.15.0
@@ -32,6 +37,9 @@ ARG CURL_OPTS \
 	USER_GID \
 	TZ
 
+# graft:keep-start
+ARG MMDBCTL_VERSION
+# graft:keep-end
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
 
 SHELL [ "/bin/bash", "-c" ]
@@ -65,9 +73,19 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 # graft:keep-start
 # Project-specific dependencies are listed here.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+	--mount=type=cache,target=/var/lib/apt,sharing=locked \
+	\
+	echo "**** Dependencies ****" && \
+	set -euxo pipefail && \
+	apt-get -y install --no-install-recommends \
+	scamper
+
+RUN echo "**** mmdbctl ****" && \
+	set -euxo pipefail && \
+	curl ${CURL_OPTS} "https://github.com/ipinfo/mmdbctl/releases/download/mmdbctl-${MMDBCTL_VERSION}/deb.sh" | sh
 
 # graft:keep-end
-
 RUN echo "**** Create user ****" && \
 	set -euxo pipefail && \
 	groupadd --gid "${USER_GID}" "${USER_NAME}" && \
@@ -201,7 +219,7 @@ case ":$PATH:" in
 	*) export PATH="$HOME/.local/bin:$PATH" ;;
 esac
 export XDG_RUNTIME_DIR="/run/user/$(id -u)"
-export GPG_TTY=$(tty 2>/dev/null || true)
+export GPG_TTY="$(tty 2>/dev/null || true)"
 alias cc="claude --dangerously-skip-permissions"
 
 _DOC_

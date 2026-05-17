@@ -40,8 +40,6 @@ All tasks use `mise run <task>`:
 | O2 (install)          | `mise run o2:install`         |
 | O2 (start)            | `mise run o2`                 |
 | O2 (stop)             | `mise run o2:stop`            |
-| CodeQL (install)      | `mise run codeql:install`     |
-| CodeQL (analyze)      | `mise run codeql`             |
 | Dev (start)           | `mise run dev:up`             |
 | Dev (stop)            | `mise run dev:down`           |
 | Dev (exec)            | `mise run dev:exec`           |
@@ -62,6 +60,25 @@ Allowed types: feat, update, fix, style, refactor, docs, perf, test, build, ci, 
 4. Stage only the relevant files
 5. Run `mise run pre-commit` (runs clean:sweep, fmt:check, clippy:strict, ast-grep, lint:gh)
 6. If errors, fix → re-stage → re-run `mise run pre-commit`
+
+## Test / Documentation Data Policy
+
+This project operates on globally-routable IP address space.
+Never use real ASNs, real IP prefixes, real organization names, or real
+allocation dates in source code (doc comments, test fixtures, examples).
+Always use RFC-reserved documentation values:
+
+| Kind         | Reserved range                        | Example                             |
+| ------------ | ------------------------------------- | ----------------------------------- |
+| IPv4 address | 198.51.100.0/24 (RFC 5737 TEST-NET-2) | `198.51.100.1`                      |
+| IPv4 prefix  | 198.51.100.0/24 (RFC 5737 TEST-NET-2) | `198.51.100.0/24`                   |
+| IPv6 address | 2001:db8::/32 (RFC 3849)              | `2001:db8::1`                       |
+| ASN          | 64496–64511 (RFC 5398)                | `64496`                             |
+| Org name     | (fictional)                           | `EXAMPLE-NET Example Network, Inc.` |
+| Date         | (fictional, post-2000)                | `2001-01-01`                        |
+
+TEST-NET-2 (198.51.100.x) is preferred over TEST-NET-1 (192.0.2.x) because
+it better represents globally-routable (non-private) address space context.
 
 ## Code Comments
 

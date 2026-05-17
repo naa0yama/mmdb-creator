@@ -15,6 +15,7 @@ target
 
 # Claude Code
 .claude/*.local.json
+.claude/artifacts/
 .claude/scheduled_tasks.lock
 .claude/skills/lib-*/SKILL.md
 .claude/skills/tool-*/SKILL.md
@@ -51,6 +52,16 @@ src-tauri/gen/
 
 # graft:keep-start
 # Project-specific dependencies are listed here.
+
+# Data files (user-specific runtime data, not tracked)
+config.toml
+data/cache/
+data/input/
+data/*.jsonl
+data/*.mmdb
+
+# Keep sample xlsx tracked
+!data/exsample/
 
 # graft:keep-end
 
