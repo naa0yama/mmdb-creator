@@ -1,12 +1,18 @@
 # Changelog
 
 ## [v0.1.0](https://github.com/naa0yama/mmdb-creator/commits/v0.1.0) - 2026-05-17
+
 ### Features 🎉
+
 - refactor: split workspace into multi-crate structure by @naa0yama in https://github.com/naa0yama/mmdb-creator/pull/9
+
 ### Dependency Updates 📦
+
 - Lock file maintenance by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/13
 - Pin Rust crate tokio to =1.52.3 by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/25
+
 ### Development Environment 🔧
+
 - Update dependency openobserve/openobserve to v0.80.1 by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/5
 - Update dependency jdx/mise to v2026.4.28 by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/4
 - Update taiki-e/install-action action to v2.75.27 by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/6
