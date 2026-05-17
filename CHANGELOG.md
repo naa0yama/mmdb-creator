@@ -1,5 +1,35 @@
 # Changelog
 
+## [v0.1.0](https://github.com/naa0yama/mmdb-creator/commits/v0.1.0) - 2026-05-17
+
+### Features 🎉
+
+- refactor: split workspace into multi-crate structure by @naa0yama in https://github.com/naa0yama/mmdb-creator/pull/9
+
+### Dependency Updates 📦
+
+- Lock file maintenance by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/13
+- Pin Rust crate tokio to =1.52.3 by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/25
+
+### Development Environment 🔧
+
+- Update dependency openobserve/openobserve to v0.80.1 by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/5
+- Update dependency jdx/mise to v2026.4.28 by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/4
+- Update taiki-e/install-action action to v2.75.27 by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/6
+- Update dependency ghalint to v1.5.6 by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/8
+- Update dependency mozilla/sccache to v0.15.0 by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/7
+- Update All action update by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/10
+- Update taiki-e/install-action action to v2.75.29 by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/11
+- Update taiki-e/install-action action to v2.75.30 by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/12
+- Update dependency jdx/mise to v2026.5.0 by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/14
+- Update taiki-e/install-action action to v2.76.0 by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/16
+- Update taiki-e/install-action action to v2.77.0 by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/17
+- Update dependency openobserve/openobserve to v0.80.2 by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/18
+- Update taiki-e/install-action action to v2.77.1 by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/19
+- Update dependency jdx/mise to v2026.5.1 by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/20
+- Update dependency github:naa0yama/graft to v0.5.4 by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/21
+- Update actions/labeler action to v6.1.0 by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/22
+
 ## [v0.1.12](https://github.com/naa0yama/boilerplate-rust/compare/v0.1.11...v0.1.12) - 2026-05-05
 
 ### Bug Fixes 🐌
