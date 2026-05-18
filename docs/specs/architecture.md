@@ -23,6 +23,7 @@ ASN が広報している CIDR リストから最も細かい CIDR 単位の MMD
 | `scan`       | CIDR の demarc 探索 (scamper ICMP-Paris traceroute) | import の出力データ (data/*.jsonl)                         |
 | `validate`   | config.toml の検証 / xlsx ヘッダー検査              | config.toml, xlsx files                                    |
 | `enrich`     | ログファイルに MMDB ルックアップ結果を付与          | JSON/JSONL log files + data/output.mmdb                    |
+| `report`     | Sankey トポロジー HTML レポート生成                 | data/scanned.jsonl → data/report.html                      |
 
 ## Data Flow
 
@@ -116,7 +117,7 @@ crates/
 ├── mmdb-scan  (lib)    ✅ scamper 統合 / CIDR 展開 / gateway 解決 / enrich
 ├── mmdb-whois (lib)    ✅ RIPE Stat + TCP 43 whois + JSONL 書き出し
 ├── mmdb-xlsx  (lib)    ✅ Excel 読み取り + JSONL 書き出し + CIDR フィルタ
-└── mmdb-web   (binary) 🔲 将来の Web UI
+└── mmdb-web   (lib)    ✅ HTML レポート生成 (report サブコマンド向け)
 ```
 
 ### Crate Dependency Graph
@@ -129,8 +130,9 @@ mmdb-cli ──► mmdb-core
          ──► mmdb-scan   ──► mmdb-core
                          ──► mmdb-dns
                          ──► mmdb-xlsx
+         ──► mmdb-web    ──► mmdb-core
 
-mmdb-web ──► (将来)
+mmdb-web ──► mmdb-core
 ```
 
 ### Crate Responsibilities
@@ -143,7 +145,7 @@ mmdb-web ──► (将来)
 | `mmdb-dns`   | lib    | ✅     | Team Cymru DNS TXT + PTR reverse lookup                                 | hickory-resolver, ipnet, tokio               |
 | `mmdb-scan`  | lib    | ✅     | scamper 統合 / CIDR 展開 / warts 解析 / gateway 解決 / enrich           | mmdb-core, mmdb-dns, mmdb-xlsx, tokio, regex |
 | `mmdb-cli`   | binary | ✅     | Clap 引数定義 / OTel / 各 crate 呼び出し (thin client)                  | 全 lib crate                                 |
-| `mmdb-web`   | binary | 🔲     | Web UI (stub も未作成)                                                  | mmdb-core                                    |
+| `mmdb-web`   | lib    | ✅     | HTML レポート生成 (Sankey topology, Phase 1)                            | mmdb-core, serde_json                        |
 
 ### Migration Progress
 
@@ -161,7 +163,7 @@ mmdb-web ──► (将来)
 | 4.4   | `mmdb-core` に build 変換追加                                              | ✅ 完了 |
 | 4.5   | `mmdb-cli` を thin client に (libs/ 削除)                                  | ✅ 完了 |
 | 4.6   | `build` → `mmdb build` + `mmdb query` 追加 (`mmdb` サブコマンドグループ化) | ✅ 完了 |
-| 5     | `mmdb-web` stub 追加                                                       | 🔲 将来 |
+| 5     | `mmdb-web` 追加 + `report` サブコマンド実装 (Sankey HTML レポート)         | ✅ 完了 |
 
 ## mmdb-cli Module Layout
 
@@ -181,6 +183,7 @@ crates/mmdb-cli/src/
 │   └── mod.rs           # import orchestration (whois + xlsx)
 ├── scan/
 │   └── mod.rs           # scan orchestration thin wrapper calling mmdb-scan
+├── report.rs            # report run() — JSONL → mmdb_web::report::generate → HTML write
 └── telemetry/
     ├── mod.rs           # OTel provider init / shutdown
     ├── conventions.rs   # project-specific semantic conventions
