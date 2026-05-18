@@ -161,7 +161,7 @@ pub async fn run(config: &Config) -> Result<()> {
     // Write per-IP enriched records to data/cache/scan/scanned.jsonl (atomic).
     let tmp_per_ip = per_ip_path.with_extension("jsonl.tmp");
     write_jsonl(&tmp_per_ip, &records).await?;
-    crate::backup::rotate_backup(per_ip_path, 5)
+    mmdb_core::backup::rotate_backup(per_ip_path, 5)
         .await
         .with_context(|| format!("failed to rotate backup for {}", per_ip_path.display()))?;
     tokio::fs::rename(&tmp_per_ip, per_ip_path)
@@ -223,7 +223,7 @@ pub async fn run(config: &Config) -> Result<()> {
     // Write range-aggregated GW records to data/scanned.jsonl (atomic).
     let tmp_path = out_path.with_extension("jsonl.tmp");
     write_gw_jsonl(&tmp_path, &gw_records).await?;
-    crate::backup::rotate_backup(out_path, 5)
+    mmdb_core::backup::rotate_backup(out_path, 5)
         .await
         .with_context(|| format!("failed to rotate backup for {}", out_path.display()))?;
     tokio::fs::rename(&tmp_path, out_path)

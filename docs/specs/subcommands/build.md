@@ -27,13 +27,15 @@ IPinfo の `mmdbctl` CLI を使用して MMDB ファイルを生成する:
 | File                | Purpose                                                          |
 | ------------------- | ---------------------------------------------------------------- |
 | `data/output.jsonl` | マージ済みデータの NDJSON。diff で変更点を追跡可能。git 管理向き |
+| `data/output.json`  | 同レコードの JSON array。Excel Power Query で直接開ける          |
 | `data/output.mmdb`  | mmdbctl で生成した MMDB バイナリ                                 |
 
-JSONL を常に出力しておくことで:
+JSONL/JSON を常に出力しておくことで:
 
 - 前回との diff が取れる (何が変わったか一目瞭然)
 - mmdb 生成に失敗しても中間データが残る
 - デバッグ・目視確認が容易
+- Excel Power Query が追加ツールなしで消費できる (`output.json`)
 
 ---
 
@@ -42,13 +44,16 @@ JSONL を常に出力しておくことで:
 ```
 1. require_command("mmdbctl")
 2. rotate_backup("data/output.jsonl", keep=5)   ← before overwrite
-3. rotate_backup("data/output.mmdb", keep=5)    ← before overwrite
-4. read data/scanned.jsonl line-by-line → ScanGwRecord
-5. for each record:
+3. rotate_backup("data/output.json",  keep=5)   ← before overwrite
+4. rotate_backup("data/output.mmdb",  keep=5)   ← before overwrite
+5. read data/scanned.jsonl line-by-line → ScanGwRecord
+6. for each record:
      a. convert to MmdbRecord (field mapping table below)
      b. write JSON line to data/output.jsonl
-6. log summary: total, gateway=inservice, xlsx-matched, skipped
-7. mmdbctl import --json --ip 4 --size 32
+     c. push MmdbRecord into Vec<MmdbRecord>
+7. log summary: total, gateway=inservice, xlsx-matched, skipped
+8. write Vec<MmdbRecord> as compact JSON array → data/output.json
+9. mmdbctl import --json --ip 4 --size 32
        --fields continent,country,autonomous_system_number,
                 autonomous_system_organization,whois,gateway,
                 xlsx,xlsx_matched,gateway_found

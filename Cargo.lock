@@ -1335,11 +1335,15 @@ name = "mmdb-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "ipnet",
  "serde",
  "serde_json",
+ "tempfile",
+ "tokio",
  "toml",
  "toml_edit",
+ "tracing",
 ]
 
 [[package]]

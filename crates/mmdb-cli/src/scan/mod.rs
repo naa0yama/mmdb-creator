@@ -9,7 +9,9 @@ use mmdb_core::{
     types::{ScanRecord, WhoisRecord},
 };
 
-use crate::{backup, cache};
+use mmdb_core::backup;
+
+use crate::cache;
 
 /// Run the scan subcommand.
 // NOTEST(io): orchestrates mmdb-scan — requires scamper on PATH

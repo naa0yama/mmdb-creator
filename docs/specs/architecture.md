@@ -135,15 +135,15 @@ mmdb-web ──► (将来)
 
 ### Crate Responsibilities
 
-| Crate        | Kind   | Status | Responsibilities                                                            | Key deps                                     |
-| ------------ | ------ | ------ | --------------------------------------------------------------------------- | -------------------------------------------- |
-| `mmdb-core`  | lib    | ✅     | 共有型 / Config スキーマ / require_command / build 変換 (to_mmdb_record 等) | serde, ipnet, chrono                         |
-| `mmdb-whois` | lib    | ✅     | ASN→CIDR (RIPE Stat) + TCP 43 whois + JSONL 書き出し                        | mmdb-core, tokio, reqwest                    |
-| `mmdb-xlsx`  | lib    | ✅     | Excel 読み取り (calamine) + JSONL 書き出し + CIDR フィルタ                  | mmdb-core, tokio, calamine                   |
-| `mmdb-dns`   | lib    | ✅     | Team Cymru DNS TXT + PTR reverse lookup                                     | hickory-resolver, ipnet, tokio               |
-| `mmdb-scan`  | lib    | ✅     | scamper 統合 / CIDR 展開 / warts 解析 / gateway 解決 / enrich               | mmdb-core, mmdb-dns, mmdb-xlsx, tokio, regex |
-| `mmdb-cli`   | binary | ✅     | Clap 引数定義 / OTel / 各 crate 呼び出し (thin client)                      | 全 lib crate                                 |
-| `mmdb-web`   | binary | 🔲     | Web UI (stub も未作成)                                                      | mmdb-core                                    |
+| Crate        | Kind   | Status | Responsibilities                                                        | Key deps                                     |
+| ------------ | ------ | ------ | ----------------------------------------------------------------------- | -------------------------------------------- |
+| `mmdb-core`  | lib    | ✅     | 共有型 / Config スキーマ / require_command / build 変換 / rotate_backup | serde, ipnet, chrono                         |
+| `mmdb-whois` | lib    | ✅     | ASN→CIDR (RIPE Stat) + TCP 43 whois + JSONL 書き出し                    | mmdb-core, tokio, reqwest                    |
+| `mmdb-xlsx`  | lib    | ✅     | Excel 読み取り (calamine) + JSONL 書き出し + CIDR フィルタ              | mmdb-core, tokio, calamine                   |
+| `mmdb-dns`   | lib    | ✅     | Team Cymru DNS TXT + PTR reverse lookup                                 | hickory-resolver, ipnet, tokio               |
+| `mmdb-scan`  | lib    | ✅     | scamper 統合 / CIDR 展開 / warts 解析 / gateway 解決 / enrich           | mmdb-core, mmdb-dns, mmdb-xlsx, tokio, regex |
+| `mmdb-cli`   | binary | ✅     | Clap 引数定義 / OTel / 各 crate 呼び出し (thin client)                  | 全 lib crate                                 |
+| `mmdb-web`   | binary | 🔲     | Web UI (stub も未作成)                                                  | mmdb-core                                    |
 
 ### Migration Progress
 
@@ -169,7 +169,6 @@ mmdb-web ──► (将来)
 crates/mmdb-cli/src/
 ├── main.rs              # binary entry point
 ├── cli.rs               # clap subcommand definitions (Command + MmdbCommand enums)
-├── backup.rs            # rotate_backup() — rotating JSONL backup
 ├── cache.rs             # cache::clear_dir()
 ├── validate.rs          # validate / validate --init-sheets / validate --ptr
 ├── build/

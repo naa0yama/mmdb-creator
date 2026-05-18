@@ -1,7 +1,6 @@
 //! mmdb-creator — CLI tool for creating `MaxMind` `MMDB` databases.
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 
-mod backup;
 mod build;
 mod cache;
 mod cli;

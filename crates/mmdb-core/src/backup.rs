@@ -1,18 +1,17 @@
-//! Rotating backup utility for JSONL output files.
+//! Rotating backup utility — writes timestamped copies to a `backup/` subdirectory.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{Context as _, Result};
 use chrono::Local;
 
-/// Copy `path` to a timestamped sibling, then delete the oldest siblings
-/// beyond `keep`.  No-ops when `path` does not exist.
-///
-/// Backup name format: `{stem}.{YYYYMMDD-HHMMSS}.{ext}` (local time).
+/// Copy `path` to `{parent}/backup/{stem}.{YYYYMMDD-HHMMSS}.{ext}`, then
+/// delete the oldest entries beyond `keep`.  No-ops when `path` does not exist.
 ///
 /// # Errors
 ///
-/// Returns an error if copying or deleting files fails.
+/// Returns an error if copying, creating the backup directory, or deleting
+/// files fails.
 #[allow(clippy::module_name_repetitions)]
 pub async fn rotate_backup(path: &Path, keep: usize) -> Result<()> {
     if !path.exists() {
@@ -38,8 +37,15 @@ pub async fn rotate_backup(path: &Path, keep: usize) -> Result<()> {
         },
     );
 
-    let ts = Local::now().format("%Y%m%d-%H%M%S").to_string();
-    let backup_path = parent.join(format!("{stem}.{ts}.{ext}"));
+    let backup_dir = parent.join("backup");
+    tokio::fs::create_dir_all(&backup_dir)
+        .await
+        .with_context(|| format!("failed to create backup directory {}", backup_dir.display()))?;
+
+    let backup_path = backup_dir.join(format!(
+        "{stem}.{}.{ext}",
+        Local::now().format("%Y%m%d-%H%M%S")
+    ));
 
     tokio::fs::copy(path, &backup_path).await.with_context(|| {
         format!(
@@ -55,16 +61,14 @@ pub async fn rotate_backup(path: &Path, keep: usize) -> Result<()> {
         "backup: created"
     );
 
-    // Collect sibling backup files matching {stem}.*.{ext}
     let prefix = format!("{stem}.");
     let suffix = format!(".{ext}");
-    let original_name = format!("{stem}.{ext}");
 
-    let mut read_dir = tokio::fs::read_dir(parent)
+    let mut read_dir = tokio::fs::read_dir(&backup_dir)
         .await
-        .with_context(|| format!("failed to read directory {}", parent.display()))?;
+        .with_context(|| format!("failed to read directory {}", backup_dir.display()))?;
 
-    let mut backups: Vec<PathBuf> = Vec::new();
+    let mut backups = Vec::new();
     while let Some(entry) = read_dir
         .next_entry()
         .await
@@ -72,10 +76,7 @@ pub async fn rotate_backup(path: &Path, keep: usize) -> Result<()> {
     {
         let name = entry.file_name();
         let name_str = name.to_string_lossy();
-        if name_str.starts_with(&prefix)
-            && name_str.ends_with(&suffix)
-            && name_str != original_name.as_str()
-        {
+        if name_str.starts_with(&prefix) && name_str.ends_with(&suffix) {
             backups.push(entry.path());
         }
     }
@@ -111,7 +112,7 @@ mod tests {
 
     #[cfg_attr(miri, ignore)] // tokio::fs uses fchmod which Miri does not support
     #[tokio::test]
-    async fn creates_single_backup() {
+    async fn creates_single_backup_in_subdir() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("scanned.jsonl");
         tokio::fs::write(&path, b"data").await.unwrap();
@@ -120,13 +121,13 @@ mod tests {
 
         assert!(path.exists(), "original must still exist");
 
-        let mut rd = tokio::fs::read_dir(dir.path()).await.unwrap();
+        let backup_dir = dir.path().join("backup");
+        assert!(backup_dir.is_dir(), "backup/ subdir must be created");
+
+        let mut rd = tokio::fs::read_dir(&backup_dir).await.unwrap();
         let mut backup_names = Vec::new();
         while let Some(entry) = rd.next_entry().await.unwrap() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            if name != "scanned.jsonl" {
-                backup_names.push(name);
-            }
+            backup_names.push(entry.file_name().to_string_lossy().to_string());
         }
         assert_eq!(backup_names.len(), 1);
         let name = backup_names.first().unwrap();
@@ -147,13 +148,11 @@ mod tests {
 
         rotate_backup(&path, 5).await.unwrap();
 
-        let mut rd = tokio::fs::read_dir(dir.path()).await.unwrap();
+        let backup_dir = dir.path().join("backup");
+        let mut rd = tokio::fs::read_dir(&backup_dir).await.unwrap();
         while let Some(entry) = rd.next_entry().await.unwrap() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            if name != "scanned.jsonl" {
-                let content = tokio::fs::read(entry.path()).await.unwrap();
-                assert_eq!(content, b"hello world");
-            }
+            let content = tokio::fs::read(entry.path()).await.unwrap();
+            assert_eq!(content, b"hello world");
         }
     }
 
@@ -163,10 +162,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("scanned.jsonl");
 
+        let backup_dir = dir.path().join("backup");
+        tokio::fs::create_dir_all(&backup_dir).await.unwrap();
+
         // Pre-create 5 older backups
         for i in 1..=5u32 {
             let name = format!("scanned.2026050{i}-000000.jsonl");
-            tokio::fs::write(dir.path().join(&name), b"old")
+            tokio::fs::write(backup_dir.join(&name), b"old")
                 .await
                 .unwrap();
         }
@@ -175,20 +177,16 @@ mod tests {
         // This call creates one more backup (total 6), oldest should be pruned
         rotate_backup(&path, 5).await.unwrap();
 
-        let mut rd = tokio::fs::read_dir(dir.path()).await.unwrap();
+        let mut rd = tokio::fs::read_dir(&backup_dir).await.unwrap();
         let mut backups = Vec::new();
         while let Some(entry) = rd.next_entry().await.unwrap() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            if name != "scanned.jsonl" {
-                backups.push(name);
-            }
+            backups.push(entry.file_name().to_string_lossy().to_string());
         }
         assert_eq!(
             backups.len(),
             5,
             "should retain exactly 5 backups, got: {backups:?}"
         );
-        // The oldest (20260501-000000) must have been removed
         assert!(
             !backups.iter().any(|n| n.contains("20260501-000000")),
             "oldest backup should be pruned"

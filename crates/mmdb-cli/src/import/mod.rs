@@ -45,7 +45,7 @@ pub async fn run(
             .context("whois config missing; add a [whois] section to config.toml")?;
 
         let whois_path = PathBuf::from("data/whois-cidr.jsonl");
-        crate::backup::rotate_backup(&whois_path, 5)
+        mmdb_core::backup::rotate_backup(&whois_path, 5)
             .await
             .with_context(|| format!("failed to rotate backup for {}", whois_path.display()))?;
 
@@ -70,7 +70,7 @@ pub async fn run(
 
         if let Some(ref sheets) = config.sheets {
             let xlsx_path = PathBuf::from("data/xlsx-rows.jsonl");
-            crate::backup::rotate_backup(&xlsx_path, 5)
+            mmdb_core::backup::rotate_backup(&xlsx_path, 5)
                 .await
                 .with_context(|| format!("failed to rotate backup for {}", xlsx_path.display()))?;
             mmdb_xlsx::import::import(

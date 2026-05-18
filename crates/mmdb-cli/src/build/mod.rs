@@ -18,12 +18,12 @@ pub async fn run(_config: &Config, input: &Path, output: &Path) -> Result<()> {
 
     tokio::try_join!(
         async {
-            crate::backup::rotate_backup(out_jsonl, 5)
+            mmdb_core::backup::rotate_backup(out_jsonl, 5)
                 .await
                 .with_context(|| format!("failed to rotate backup for {}", out_jsonl.display()))
         },
         async {
-            crate::backup::rotate_backup(output, 5)
+            mmdb_core::backup::rotate_backup(output, 5)
                 .await
                 .with_context(|| format!("failed to rotate backup for {}", output.display()))
         },
