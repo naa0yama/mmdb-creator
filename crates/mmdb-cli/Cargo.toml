@@ -55,6 +55,7 @@ process-metrics = [
 mmdb-core.workspace = true
 mmdb-dns.workspace = true
 mmdb-scan.workspace = true
+mmdb-web.workspace = true
 mmdb-whois.workspace = true
 mmdb-xlsx.workspace = true
 
