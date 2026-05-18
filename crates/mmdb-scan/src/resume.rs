@@ -43,17 +43,18 @@ pub fn expand_cidrs(cidrs: &[IpNet], full: bool) -> Vec<(IpNet, IpAddr)> {
     out
 }
 
-/// Read an existing `scan.jsonl` and collect the set of already-scanned destination IPs.
+/// Read an existing `scan.jsonl` and collect the set of already-scanned `(CIDR, IP)` pairs.
 ///
 /// Lines that fail to parse are silently skipped so a partially-written file does not
-/// prevent resumption.
+/// prevent resumption.  Records whose `range` field is not a valid [`IpNet`] are also
+/// skipped — the IP will be re-scanned under the new CIDR on the next run.
 ///
 /// # Errors
 ///
 /// Returns an error only if the file exists but cannot be opened.
 // NOTEST(io): reads scan JSONL file from filesystem
 #[cfg_attr(coverage_nightly, coverage(off))]
-pub async fn load_completed(path: &Path) -> Result<HashSet<IpAddr>> {
+pub async fn load_completed(path: &Path) -> Result<HashSet<(IpNet, IpAddr)>> {
     if !path.exists() {
         return Ok(HashSet::new());
     }
@@ -67,8 +68,11 @@ pub async fn load_completed(path: &Path) -> Result<HashSet<IpAddr>> {
         let Ok(record) = serde_json::from_str::<ScanRecord>(line) else {
             continue;
         };
-        if let Ok(ip) = record.routes.destination.parse::<IpAddr>() {
-            done.insert(ip);
+        if let (Ok(net), Ok(ip)) = (
+            record.range.parse::<IpNet>(),
+            record.routes.destination.parse::<IpAddr>(),
+        ) {
+            done.insert((net, ip));
         }
     }
     Ok(done)
@@ -78,11 +82,11 @@ pub async fn load_completed(path: &Path) -> Result<HashSet<IpAddr>> {
 #[must_use]
 pub fn compute_remaining<'a, S: ::std::hash::BuildHasher>(
     targets: &'a [(IpNet, IpAddr)],
-    done: &HashSet<IpAddr, S>,
+    done: &HashSet<(IpNet, IpAddr), S>,
 ) -> Vec<&'a (IpNet, IpAddr)> {
     targets
         .iter()
-        .filter(|(_, ip)| !done.contains(ip))
+        .filter(|(cidr, ip)| !done.contains(&(*cidr, *ip)))
         .collect()
 }
 
@@ -248,7 +252,7 @@ mod tests {
         let cidr = net("192.0.2.0/30");
         let targets = expand_cidrs(&[cidr], false);
         let mut done = HashSet::new();
-        done.insert(targets[0].1);
+        done.insert(targets[0]);
         let remaining = compute_remaining(&targets, &done);
         assert_eq!(remaining.len(), targets.len() - 1);
     }
@@ -257,7 +261,7 @@ mod tests {
     fn compute_remaining_all_done() {
         let cidr = net("192.0.2.0/30");
         let targets = expand_cidrs(&[cidr], false);
-        let done: HashSet<IpAddr> = targets.iter().map(|(_, ip)| *ip).collect();
+        let done: HashSet<(IpNet, IpAddr)> = targets.iter().copied().collect();
         let remaining = compute_remaining(&targets, &done);
         assert!(remaining.is_empty());
     }
@@ -266,8 +270,33 @@ mod tests {
     fn compute_remaining_none_done() {
         let cidr = net("192.0.2.0/30");
         let targets = expand_cidrs(&[cidr], false);
-        let done = HashSet::new();
+        let done: HashSet<(IpNet, IpAddr)> = HashSet::new();
         let remaining = compute_remaining(&targets, &done);
         assert_eq!(remaining.len(), targets.len());
+    }
+
+    #[test]
+    fn compute_remaining_new_cidr_forces_rescan() {
+        // Same IP appeared under /23 before; now targeted as /32 → not in done set.
+        let original_cidr = net("198.51.100.0/23");
+        let new_cidr = net("198.51.100.1/32");
+        let ip = v4("198.51.100.1");
+        let mut done = HashSet::new();
+        done.insert((original_cidr, ip));
+        let targets = vec![(new_cidr, ip)];
+        let remaining = compute_remaining(&targets, &done);
+        assert_eq!(remaining.len(), 1, "new CIDR should not be marked as done");
+    }
+
+    #[test]
+    fn compute_remaining_same_cidr_skips() {
+        // Same (CIDR, IP) pair → already done, should be skipped.
+        let cidr = net("198.51.100.0/24");
+        let ip = v4("198.51.100.1");
+        let mut done = HashSet::new();
+        done.insert((cidr, ip));
+        let targets = vec![(cidr, ip)];
+        let remaining = compute_remaining(&targets, &done);
+        assert!(remaining.is_empty(), "same (CIDR, IP) should be skipped");
     }
 }

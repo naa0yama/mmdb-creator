@@ -145,15 +145,28 @@ scan ループ ──result──► mpsc channel ──► writer タスク
 
 ## Resume (Skip Logic)
 
-scan 開始時に `data/scanned.jsonl` を読み込み、完了済みの CIDR を抽出してスキップ。
+scan 開始時に `data/cache/scan/scanning.jsonl` を読み込み、完了済みのターゲットをスキップ。
 
 ```
-total     = CIDRs generated from whois-cidr.jsonl + xlsx-rows.jsonl
-done      = IPs already in scanned.jsonl
+total     = (CIDR, IP) pairs generated from whois-cidr.jsonl + xlsx-rows.jsonl
+done      = (CIDR, IP) pairs already in scanning.jsonl
 remaining = total - done
 ```
 
+done-set は `(parent_cidr, destination_ip)` のペアでキー付けされる。IP 単独ではない。
+理由: hosting xlsx 行が `/32` を追加したとき、同 IP が以前より広い whois CIDR (`/23` 等) で
+スキャン済みであっても、新しい `range = /32` の `ScanRecord` が必要なため再スキャンする。
+
 TUI 上で "Skipped (cached): N" として表示する。
+
+### Stale Cache Pruning
+
+scan 起動時 (`--ip` なしの場合)、`scanning.jsonl` から現在の CIDR セットに存在しない
+レコードを削除してからスキャンを開始する。
+
+- ファイル不在 → no-op
+- 削除対象なし → no-op (ファイル書き換えなし)
+- 削除あり → 一時ファイルに書き込み atomic rename で置き換え
 
 ---
 
@@ -168,7 +181,8 @@ TUI 上で "Skipped (cached): N" として表示する。
 3. DNS reverse lookup で PTR を一括解決
 4. xlsx 行を各 `ScanGwRecord` に付加 (PTR マッチまたは CIDR 包含で選択)
 5. 派生フラグを全レコードに設定してから `data/scanned.jsonl` に書き込む:
-   - `xlsx_matched = xlsx.as_ref().is_some_and(|m| !m.is_empty())`
+   - `xlsx_matched.backbone = xlsx["backbone"] matched`
+   - `xlsx_matched.hosting  = xlsx["hosting"]  matched`
    - `gateway_found = gateway.status == "inservice"`
 
 ### PTR Progress Logging
@@ -250,7 +264,7 @@ Walk hops from last to first. For each hop:
 			"serviceid": "SVC-001"
 		}
 	},
-	"xlsx_matched": true,
+	"xlsx_matched": { "backbone": true, "hosting": false },
 	"gateway_found": true,
 	"measured_at": "2026-05-09T14:08:43Z"
 }
@@ -260,7 +274,7 @@ Walk hops from last to first. For each hop:
 - `host_ip`, `host_ptr`: `#[serde(skip)]` — reserved for future host-analysis phase.
 - `inetnum`, `country`, `whois_source`, `whois_last_modified`: joined from whois-cidr.jsonl via LPM at GW-resolution time.
 - `xlsx`: sheettype-keyed map (`"backbone"` / `"hosting"`) of matched xlsx rows; each entry contains `_source` metadata and column values. Absent when no match for any sheettype.
-- `xlsx_matched`: `true` when at least one sheettype matched (`xlsx` map is non-empty); `false` otherwise.
+- `xlsx_matched`: `XlsxMatchStatus` struct with per-sheettype boolean flags (`backbone`, `hosting`). `xlsx_matched.any()` returns `true` when at least one sheettype matched.
 - `gateway_found`: `true` when gateway resolution fully succeeded (`gateway.status == "inservice"`); `false` otherwise.
 
 ---
