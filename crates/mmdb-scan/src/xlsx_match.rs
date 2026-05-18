@@ -373,7 +373,7 @@ mod tests {
 
     use mmdb_core::{
         config::{ColumnMapping, ColumnType, Config, NormalizeConfig, SheetConfig, SheetType},
-        types::{GatewayDevice, GatewayInfo, ScanGwRecord},
+        types::{GatewayDevice, GatewayInfo, ScanGwRecord, XlsxMatchStatus},
     };
     use serde_json::json;
     use tempfile::NamedTempFile;
@@ -387,6 +387,7 @@ mod tests {
             scan: None,
             mmdb: mmdb_core::config::MmdbConfig::default(),
             normalize: std::collections::HashMap::new(),
+            enrich: None,
         }
     }
 
@@ -415,7 +416,7 @@ mod tests {
             host_ptr: None,
             measured_at: None,
             xlsx: None,
-            xlsx_matched: false,
+            xlsx_matched: XlsxMatchStatus::default(),
             gateway_found: false,
         }
     }

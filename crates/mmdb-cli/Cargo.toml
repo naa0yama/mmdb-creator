@@ -63,6 +63,10 @@ anyhow.workspace = true
 clap.workspace = true
 tokio.workspace = true
 
+# TUI
+crossterm.workspace = true
+ratatui.workspace = true
+
 # Data
 calamine.workspace = true
 chrono.workspace = true

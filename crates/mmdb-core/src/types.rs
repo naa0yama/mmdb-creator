@@ -2,6 +2,37 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Per-sheettype xlsx match flags for a scanned record.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct XlsxMatchStatus {
+    /// Matched a row in the backbone sheettype.
+    #[serde(default)]
+    pub backbone: bool,
+    /// Matched a row in the hosting sheettype.
+    #[serde(default)]
+    pub hosting: bool,
+}
+
+impl XlsxMatchStatus {
+    /// Returns `true` if any sheettype matched.
+    #[must_use]
+    pub const fn any(&self) -> bool {
+        self.backbone || self.hosting
+    }
+
+    /// Build match flags from an xlsx map keyed by sheettype name.
+    ///
+    /// Sets `backbone` when the map contains the key `"backbone"` and `hosting`
+    /// when it contains `"hosting"`.  Accepts any map with `&str`-comparable keys.
+    #[must_use]
+    pub fn from_xlsx_map<V>(xlsx: Option<&std::collections::HashMap<String, V>>) -> Self {
+        Self {
+            backbone: xlsx.is_some_and(|m| m.contains_key("backbone")),
+            hosting: xlsx.is_some_and(|m| m.contains_key("hosting")),
+        }
+    }
+}
+
 /// The merged `MMDB` record written to `NDJSON` and imported by mmdbctl.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MmdbRecord {
@@ -28,8 +59,8 @@ pub struct MmdbRecord {
     /// Data sourced from Excel (.xlsx) files, keyed by sheettype ("backbone"/"hosting").
     #[serde(skip_serializing_if = "Option::is_none")]
     pub xlsx: Option<std::collections::HashMap<String, OperationalData>>,
-    /// True when this record matched an xlsx row.
-    pub xlsx_matched: bool,
+    /// Per-sheettype xlsx match flags.
+    pub xlsx_matched: XlsxMatchStatus,
     /// True when a gateway was successfully resolved.
     pub gateway_found: bool,
 }
@@ -278,9 +309,9 @@ pub struct ScanGwRecord {
     /// xlsx rows matched per sheettype ("backbone"/"hosting"); absent when no match.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub xlsx: Option<std::collections::HashMap<String, serde_json::Value>>,
-    /// True when this record matched an xlsx row.
+    /// Per-sheettype xlsx match flags.
     #[serde(default)]
-    pub xlsx_matched: bool,
+    pub xlsx_matched: XlsxMatchStatus,
     /// True when a gateway was successfully resolved.
     #[serde(default)]
     pub gateway_found: bool,
@@ -313,4 +344,62 @@ pub struct Hop {
     /// Reverse DNS PTR record; populated during post-scan enrichment.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ptr: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::XlsxMatchStatus;
+
+    #[test]
+    fn xlsx_match_status_default_is_false() {
+        let s = XlsxMatchStatus::default();
+        assert!(!s.backbone);
+        assert!(!s.hosting);
+        assert!(!s.any());
+    }
+
+    #[test]
+    fn xlsx_match_status_any_backbone_true() {
+        let s = XlsxMatchStatus {
+            backbone: true,
+            hosting: false,
+        };
+        assert!(s.any());
+    }
+
+    #[test]
+    fn xlsx_match_status_any_hosting_true() {
+        let s = XlsxMatchStatus {
+            backbone: false,
+            hosting: true,
+        };
+        assert!(s.any());
+    }
+
+    #[test]
+    fn xlsx_match_status_any_both_false() {
+        let s = XlsxMatchStatus {
+            backbone: false,
+            hosting: false,
+        };
+        assert!(!s.any());
+    }
+
+    #[test]
+    fn xlsx_match_status_serde_round_trip() {
+        let s = XlsxMatchStatus {
+            backbone: true,
+            hosting: false,
+        };
+        let json = serde_json::to_string(&s).unwrap();
+        let s2: XlsxMatchStatus = serde_json::from_str(&json).unwrap();
+        assert_eq!(s, s2);
+    }
+
+    #[test]
+    fn xlsx_match_status_serde_default_missing_fields() {
+        let s: XlsxMatchStatus = serde_json::from_str("{}").unwrap();
+        assert!(!s.backbone);
+        assert!(!s.hosting);
+    }
 }

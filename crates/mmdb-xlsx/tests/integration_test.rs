@@ -1,7 +1,7 @@
 //! Integration tests for `mmdb-xlsx` using the real sample xlsx file.
 //!
 //! Tests run from the workspace root, so paths like
-//! `"data/exsample/IPAM_20260401r3.xlsx"` work directly.
+//! `"data/exsample/IPAM_bb_20260517r5.xlsx"` work directly.
 
 #![allow(clippy::indexing_slicing, clippy::panic, clippy::unwrap_used)]
 
@@ -29,7 +29,7 @@ fn workspace_root() -> PathBuf {
 
 fn test_config() -> SheetConfig {
     SheetConfig {
-        filename: workspace_root().join("data/exsample/IPAM_20260401r3.xlsx"),
+        filename: workspace_root().join("data/exsample/IPAM_bb_20260517r5.xlsx"),
         excludes_sheets: vec![],
         header_row: 3, // 1-indexed: row 3 = 0-indexed row 2 = the header row
         sheettype: mmdb_core::config::SheetType::Backbone,
@@ -91,17 +91,13 @@ fn reads_sample_xlsx_sheet_count() {
 #[test]
 fn reads_sample_xlsx_row_count() {
     let results = read_xlsx(&test_config()).unwrap();
-    // Rows 3-5 (xlsx) have VLANID + use populated and parse successfully.
-    // Row 6 (xlsx) has empty VLANID and use columns, so it is skipped by the reader.
+    // Rows 4-7 (xlsx) all have VLANID + use populated and parse successfully.
     assert_eq!(
         results[0].rows.len(),
-        3,
-        "expected 3 successfully parsed data rows"
+        4,
+        "expected 4 successfully parsed data rows"
     );
-    assert_eq!(
-        results[0].skipped_count, 1,
-        "expected 1 skipped row (row 6 with empty integer/bool cells)"
-    );
+    assert_eq!(results[0].skipped_count, 0, "expected 0 skipped rows");
 }
 
 #[test]
@@ -162,10 +158,8 @@ fn reads_sample_xlsx_addresses_newline_separated() {
 
 #[test]
 fn reads_sample_xlsx_addresses_vip_annotation() {
-    // Row 2 (xlsx data row 5): demarc = "192.0.2.0/30,\n2001:db8::/64" → 2 addresses.
-    // This exercises the comma+newline separator that appears in the last parseable data row.
-    // (Row 6 in the xlsx, which contains a VIP annotation in PE addresses, is skipped because
-    //  its VLANID and use columns are empty and cannot be parsed as Integer/Bool.)
+    // Row 2 (xlsx data row 6): demarc = "193.0.10.8/30,\n2001:db8::/64" → 2 addresses.
+    // Exercises the comma+newline separator.
     let results = read_xlsx(&test_config()).unwrap();
     let field = &results[0].rows[2].fields["demarc_addresses"];
     match field {
@@ -183,7 +177,7 @@ fn reads_sample_xlsx_addresses_vip_annotation() {
 #[test]
 fn inspect_sheets_returns_sheet_names_and_headers() {
     let config = SheetConfig {
-        filename: workspace_root().join("data/exsample/IPAM_20260401r3.xlsx"),
+        filename: workspace_root().join("data/exsample/IPAM_bb_20260517r5.xlsx"),
         excludes_sheets: vec![],
         header_row: 3,
         sheettype: mmdb_core::config::SheetType::Backbone,
@@ -194,7 +188,7 @@ fn inspect_sheets_returns_sheet_names_and_headers() {
     assert_eq!(sheets.len(), 2);
     let names: Vec<&str> = sheets.iter().map(|s| s.name.as_str()).collect();
     assert!(names.contains(&"border1.ty1"));
-    assert!(names.contains(&"border1.ty2"));
+    assert!(names.contains(&"border2.ty1"));
     // Each sheet has the same header structure
     for sheet in &sheets {
         assert!(sheet.headers.len() >= 10);
@@ -210,8 +204,8 @@ fn inspect_sheets_returns_sheet_names_and_headers() {
 #[test]
 fn excludes_sheets_filters_correctly() {
     let config = SheetConfig {
-        filename: workspace_root().join("data/exsample/IPAM_20260401r3.xlsx"),
-        excludes_sheets: vec!["border1.ty1".to_owned(), "border1.ty2".to_owned()],
+        filename: workspace_root().join("data/exsample/IPAM_bb_20260517r5.xlsx"),
+        excludes_sheets: vec!["border1.ty1".to_owned(), "border2.ty1".to_owned()],
         header_row: 3,
         sheettype: mmdb_core::config::SheetType::Backbone,
         groups: vec![],

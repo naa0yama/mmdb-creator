@@ -25,8 +25,20 @@ cache_dir = "data/cache/import"
 # Cache TTL in seconds (default: 604800 = 7 days)
 # cache_ttl_secs = 604800
 
+# Connection timeout in seconds for TCP port 43 queries (default: 10)
+# timeout_sec = 10
+
 # TCP 43 query delay in milliseconds between consecutive queries (default: 2000)
 # rate_limit_ms = 2000
+
+# Maximum retry attempts per query on transient failure (default: 3)
+# max_retries = 3
+
+# Initial backoff in milliseconds before the first retry (default: 1000)
+# initial_backoff_ms = 1000
+
+# Delay in milliseconds between consecutive RIPE Stat REST API requests (default: 1000)
+# ripe_stat_rate_limit_ms = 1000
 
 # HTTP retry settings (mirrors curl --retry / --retry-delay)
 # http_max_retries = 3
@@ -35,10 +47,39 @@ cache_dir = "data/cache/import"
 # ──────────────────────────────────────────────────────────────────────────────
 # Sheets
 # ──────────────────────────────────────────────────────────────────────────────
+
+# ──────────────────────────────────────────────────────────────────────────────
 # [[sheets]]
-# filename = "IPAM.xlsx"
+# filename = "data/exsample/IPAM_host.xlsx"
+# header_row = 1
+# excludes_sheets = []
+# sheettype = "hosting" # "backbone" (default) or "hosting"
+#
+# [[sheets.columns]]
+# name = "IPAddress"
+# sheet_name = "IPAddress"
+# type = "addresses"
+#
+# [[sheets.columns]]
+# name = "hostname"
+# sheet_name = "hostname"
+# type = "string"
+#
+# [[sheets.columns]]
+# name = "cidr"
+# sheet_name = "cidr"
+# type = "string"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# [[sheets]]
+# filename = "IPAM_bb.xlsx"
 # header_row = 3
 # excludes_sheets = ["Power"]
+# sheettype = "backbone"    # "backbone" (default) or "hosting"
+# # groups: sheet tab names whose duplicate CIDRs are permitted with each other.
+# # Each inner list is one redundancy group; two sheets are exempt when their
+# # group-ID sets intersect.
+# # groups = [["border1.ty1", "border1.ty2"], ["core1", "core2"]]
 #
 # [[sheets.columns]]
 # name = "host"
@@ -174,3 +215,17 @@ cache_dir = "data/cache/import"
 # Override per-invocation with --out / --mmdb CLI flags.
 # [mmdb]
 # path = "data/output.mmdb"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Enrich field projection
+# ──────────────────────────────────────────────────────────────────────────────
+# Run `mmdb-cli enrich --init-fields` to populate this section interactively.
+# [enrich]
+# flatten = true          # true = dot-notation keys; false = nested structure
+# array_join = ","        # join scalar arrays with this separator; omit to keep as array
+# fields = [
+#   "ip",
+#   "mmdb.network",
+#   "mmdb.autonomous_system_number",
+#   "mmdb.operational",            # Object path: selects entire subtree
+# ]

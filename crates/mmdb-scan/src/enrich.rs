@@ -14,7 +14,7 @@ use anyhow::{Context as _, Result};
 use ipnet::IpNet;
 use mmdb_core::{
     config::Config,
-    types::{ScanGwRecord, ScanRecord, WhoisData, WhoisRecord},
+    types::{ScanGwRecord, ScanRecord, WhoisData, WhoisRecord, XlsxMatchStatus},
 };
 
 use crate::ptr_parse;
@@ -93,6 +93,26 @@ pub async fn run(config: &Config) -> Result<()> {
 
     tracing::info!(count = records.len(), "enrich: loaded scan records");
 
+    // Drop records whose CIDR is no longer in the current target set.
+    // This is the safety-net filter: scan-side pruning runs first, but stale
+    // records may still reach this point if the cache was not pruned (e.g.,
+    // enrich was invoked directly without a preceding scan run).
+    let current_cidrs: HashSet<IpNet> = prefixes.iter().copied().collect();
+    let before = records.len();
+    records.retain(|r| {
+        r.range
+            .parse::<IpNet>()
+            .is_ok_and(|net| current_cidrs.contains(&net))
+    });
+    let stale = before.saturating_sub(records.len());
+    if stale > 0 {
+        tracing::info!(
+            stale,
+            kept = records.len(),
+            "enrich: filtered stale records not in current CIDR set"
+        );
+    }
+
     // Phase 1: filter hops + renumber.
     for record in &mut records {
         let target_cidr: Option<IpNet> = record.range.parse().ok();
@@ -141,7 +161,7 @@ pub async fn run(config: &Config) -> Result<()> {
     // Write per-IP enriched records to data/cache/scan/scanned.jsonl (atomic).
     let tmp_per_ip = per_ip_path.with_extension("jsonl.tmp");
     write_jsonl(&tmp_per_ip, &records).await?;
-    crate::backup::rotate_backup(per_ip_path, 5)
+    mmdb_core::backup::rotate_backup(per_ip_path, 5)
         .await
         .with_context(|| format!("failed to rotate backup for {}", per_ip_path.display()))?;
     tokio::fs::rename(&tmp_per_ip, per_ip_path)
@@ -196,14 +216,14 @@ pub async fn run(config: &Config) -> Result<()> {
 
     // Populate derived boolean fields before writing.
     for record in &mut gw_records {
-        record.xlsx_matched = record.xlsx.as_ref().is_some_and(|m| !m.is_empty());
+        record.xlsx_matched = XlsxMatchStatus::from_xlsx_map(record.xlsx.as_ref());
         record.gateway_found = record.gateway.status == "inservice";
     }
 
     // Write range-aggregated GW records to data/scanned.jsonl (atomic).
     let tmp_path = out_path.with_extension("jsonl.tmp");
     write_gw_jsonl(&tmp_path, &gw_records).await?;
-    crate::backup::rotate_backup(out_path, 5)
+    mmdb_core::backup::rotate_backup(out_path, 5)
         .await
         .with_context(|| format!("failed to rotate backup for {}", out_path.display()))?;
     tokio::fs::rename(&tmp_path, out_path)
@@ -487,5 +507,58 @@ mod tests {
         sort_by_range(&mut records);
         assert_eq!(records[0].range, "198.51.100.0/24");
         assert_eq!(records[1].range, "not-a-cidr");
+    }
+
+    fn current_cidrs(cidrs: &[&str]) -> HashSet<IpNet> {
+        cidrs.iter().map(|s| s.parse().unwrap()).collect()
+    }
+
+    #[test]
+    fn stale_filter_removes_records_not_in_current_cidrs() {
+        let mut records = vec![
+            record_with_range("198.51.100.0/24"),
+            record_with_range("203.0.113.0/24"),
+        ];
+        let current = current_cidrs(&["198.51.100.0/24"]);
+        let before = records.len();
+        records.retain(|r| {
+            r.range
+                .parse::<IpNet>()
+                .is_ok_and(|net| current.contains(&net))
+        });
+        assert_eq!(records.len(), 1);
+        assert_eq!(before.saturating_sub(records.len()), 1);
+        assert_eq!(records[0].range, "198.51.100.0/24");
+    }
+
+    #[test]
+    fn stale_filter_keeps_all_when_all_current() {
+        let mut records = vec![
+            record_with_range("198.51.100.0/24"),
+            record_with_range("198.51.100.0/25"),
+        ];
+        let current = current_cidrs(&["198.51.100.0/24", "198.51.100.0/25"]);
+        records.retain(|r| {
+            r.range
+                .parse::<IpNet>()
+                .is_ok_and(|net| current.contains(&net))
+        });
+        assert_eq!(records.len(), 2);
+    }
+
+    #[test]
+    fn stale_filter_drops_invalid_range() {
+        let mut records = vec![
+            record_with_range("198.51.100.0/24"),
+            record_with_range("not-a-cidr"),
+        ];
+        let current = current_cidrs(&["198.51.100.0/24"]);
+        records.retain(|r| {
+            r.range
+                .parse::<IpNet>()
+                .is_ok_and(|net| current.contains(&net))
+        });
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].range, "198.51.100.0/24");
     }
 }

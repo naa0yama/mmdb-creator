@@ -1,7 +1,6 @@
 //! mmdb-scan: scamper-based network scan pipeline.
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 
-mod backup;
 pub mod gw;
 pub mod normalize;
 pub mod ptr_parse;

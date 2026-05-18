@@ -22,6 +22,71 @@ pub struct Config {
     /// Named normalisation rule sets (`[normalize.<name>]`).
     #[serde(default)]
     pub normalize: HashMap<String, NormalizeConfig>,
+    /// Field projection configuration for the enrich subcommand.
+    pub enrich: Option<EnrichConfig>,
+}
+
+/// Configuration for the enrich subcommand field projection.
+#[allow(dead_code, clippy::module_name_repetitions)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct EnrichConfig {
+    /// Separator used when joining list fields of type `array_join`.
+    #[serde(default = "default_array_join_sep")]
+    pub array_join_sep: String,
+    /// Ordered list of output fields.
+    #[serde(default)]
+    pub fields: Vec<EnrichField>,
+}
+
+/// A single field entry in the `[[enrich.fields]]` table array.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct EnrichField {
+    /// Dot-notation source path in the enriched record (e.g. `"mmdb.asn"`).
+    pub field: String,
+    /// Column name in the processed output.  Falls back to `field` when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_name: Option<String>,
+    /// How to coerce the value in the processed output.
+    #[serde(rename = "type", default)]
+    pub field_type: EnrichFieldType,
+}
+
+/// Type coercion applied to a field in the processed output.
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum EnrichFieldType {
+    /// Pass the value through unchanged, preserving its original JSON type.
+    #[default]
+    Auto,
+    /// Coerce value to string using its display representation.
+    String,
+    /// Parse value as a 64-bit integer; keeps raw value on failure.
+    Integer,
+    /// Parse value as a boolean; keeps raw value on failure.
+    Bool,
+    /// Join scalar array elements with the global `array_join_sep`; keeps raw if object array.
+    ArrayJoin,
+}
+
+impl EnrichFieldType {
+    /// Return the canonical TOML string representation of this type tag.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::String => "string",
+            Self::Integer => "integer",
+            Self::Bool => "bool",
+            Self::ArrayJoin => "array_join",
+        }
+    }
+}
+
+// NOTEST(cfg): serde default callback — returns constant string
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn default_array_join_sep() -> String {
+    String::from(",")
 }
 
 /// MMDB path configuration shared by `mmdb build`, `mmdb query`, and `enrich`.
@@ -93,6 +158,55 @@ impl Config {
         let text = std::fs::read_to_string(path)
             .with_context(|| format!("failed to read config {}", path.display()))?;
         toml::from_str(&text).with_context(|| format!("failed to parse config {}", path.display()))
+    }
+
+    /// Write or replace the `[enrich]` section in the config file at `path`.
+    ///
+    /// Preserves existing comments and formatting for all other sections.
+    /// If `[enrich]` already exists it is replaced; otherwise appended.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read, parsed as TOML, or written.
+    // NOTEST(io): reads and writes TOML file from filesystem
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    pub fn write_enrich_section(path: &Path, enrich: &EnrichConfig) -> Result<()> {
+        let text = std::fs::read_to_string(path)
+            .with_context(|| format!("failed to read config {}", path.display()))?;
+        let mut doc: toml_edit::DocumentMut = text
+            .parse()
+            .with_context(|| format!("failed to parse config {}", path.display()))?;
+
+        // Remove old [enrich] / [[enrich.fields]] entirely, then rebuild.
+        doc.remove("enrich");
+
+        let mut enrich_table = toml_edit::Table::new();
+        if enrich.array_join_sep != "," {
+            enrich_table.insert(
+                "array_join_sep",
+                toml_edit::value(enrich.array_join_sep.as_str()),
+            );
+        }
+
+        let mut fields_arr = toml_edit::ArrayOfTables::new();
+        for field in &enrich.fields {
+            let mut t = toml_edit::Table::new();
+            t.insert("field", toml_edit::value(field.field.as_str()));
+            if let Some(ref name) = field.output_name {
+                t.insert("output_name", toml_edit::value(name.as_str()));
+            }
+            if field.field_type != EnrichFieldType::Auto {
+                t.insert("type", toml_edit::value(field.field_type.as_str()));
+            }
+            fields_arr.push(t);
+        }
+        enrich_table.insert("fields", toml_edit::Item::ArrayOfTables(fields_arr));
+
+        doc.insert("enrich", toml_edit::Item::Table(enrich_table));
+
+        std::fs::write(path, doc.to_string())
+            .with_context(|| format!("failed to write config {}", path.display()))?;
+        Ok(())
     }
 
     /// Return a minimal starter `config.toml` template as a string.
@@ -416,4 +530,62 @@ pub enum ColumnType {
     Addresses,
     /// Boolean true/false value.
     Bool,
+}
+
+#[cfg(test)]
+#[allow(clippy::indexing_slicing, clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn enrich_config_defaults() {
+        let cfg: EnrichConfig = toml::from_str("").unwrap();
+        assert_eq!(cfg.array_join_sep, ",");
+        assert!(cfg.fields.is_empty());
+    }
+
+    #[test]
+    fn enrich_field_type_default_is_auto() {
+        let field: EnrichField = toml::from_str(r#"field = "ip_address""#).unwrap();
+        assert_eq!(field.field_type, EnrichFieldType::Auto);
+        assert!(field.output_name.is_none());
+    }
+
+    #[test]
+    fn enrich_field_round_trip() {
+        let toml_str = r#"
+[[enrich.fields]]
+field = "ip_address"
+output_name = "IPAddr"
+
+[[enrich.fields]]
+field = "mmdb.asn"
+output_name = "ASN"
+type = "integer"
+
+[[enrich.fields]]
+field = "mmdb.tags"
+type = "array_join"
+
+[[enrich.fields]]
+field = "mmdb.network"
+type = "string"
+"#;
+        let cfg: Config = toml::from_str(toml_str).unwrap();
+        let enrich = cfg.enrich.unwrap();
+        assert_eq!(enrich.fields.len(), 4);
+        assert_eq!(enrich.fields[0].field, "ip_address");
+        assert_eq!(enrich.fields[0].output_name.as_deref(), Some("IPAddr"));
+        assert_eq!(enrich.fields[0].field_type, EnrichFieldType::Auto);
+        assert_eq!(enrich.fields[1].field_type, EnrichFieldType::Integer);
+        assert_eq!(enrich.fields[2].field_type, EnrichFieldType::ArrayJoin);
+        assert_eq!(enrich.fields[3].field_type, EnrichFieldType::String);
+        assert!(enrich.fields[2].output_name.is_none());
+    }
+
+    #[test]
+    fn enrich_absent_is_none() {
+        let cfg: Config = toml::from_str("").unwrap();
+        assert!(cfg.enrich.is_none());
+    }
 }
