@@ -1307,6 +1307,7 @@ dependencies = [
  "mmdb-core",
  "mmdb-dns",
  "mmdb-scan",
+ "mmdb-web",
  "mmdb-whois",
  "mmdb-xlsx",
  "opentelemetry",
@@ -1375,6 +1376,18 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "mmdb-web"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "indexmap",
+ "mmdb-core",
+ "serde",
+ "serde_json",
  "tracing",
 ]
 
