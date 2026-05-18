@@ -6,7 +6,12 @@ use std::process::Command;
 
 use anyhow::{Context as _, Result};
 
-use mmdb_core::{build::to_mmdb_record, config::Config, external, types::ScanGwRecord};
+use mmdb_core::{
+    build::to_mmdb_record,
+    config::Config,
+    external,
+    types::{MmdbRecord, ScanGwRecord},
+};
 
 /// Run the build subcommand.
 // NOTEST(io): reads JSONL from disk, writes output.jsonl, invokes mmdbctl binary
@@ -15,12 +20,18 @@ pub async fn run(_config: &Config, input: &Path, output: &Path) -> Result<()> {
     external::require_commands(&["mmdbctl"])?;
 
     let out_jsonl = Path::new("data/output.jsonl");
+    let out_json = Path::new("data/output.json");
 
     tokio::try_join!(
         async {
             mmdb_core::backup::rotate_backup(out_jsonl, 5)
                 .await
                 .with_context(|| format!("failed to rotate backup for {}", out_jsonl.display()))
+        },
+        async {
+            mmdb_core::backup::rotate_backup(out_json, 5)
+                .await
+                .with_context(|| format!("failed to rotate backup for {}", out_json.display()))
         },
         async {
             mmdb_core::backup::rotate_backup(output, 5)
@@ -41,6 +52,7 @@ pub async fn run(_config: &Config, input: &Path, output: &Path) -> Result<()> {
     let mut total = 0usize;
     let mut inservice = 0usize;
     let mut xlsx_matched = 0usize;
+    let mut records: Vec<MmdbRecord> = Vec::new();
 
     for line in reader.lines() {
         let line = line.context("failed to read line from input")?;
@@ -62,6 +74,7 @@ pub async fn run(_config: &Config, input: &Path, output: &Path) -> Result<()> {
         let mmdb = to_mmdb_record(&record);
         let json = serde_json::to_string(&mmdb).context("failed to serialize MmdbRecord")?;
         writeln!(writer, "{json}").context("failed to write output line")?;
+        records.push(mmdb);
     }
 
     writer.flush().context("failed to flush output.jsonl")?;
@@ -74,6 +87,12 @@ pub async fn run(_config: &Config, input: &Path, output: &Path) -> Result<()> {
         "build: wrote {}",
         out_jsonl.display()
     );
+
+    let json_file = std::fs::File::create(out_json)
+        .with_context(|| format!("failed to create {}", out_json.display()))?;
+    serde_json::to_writer(json_file, &records)
+        .with_context(|| format!("failed to write {}", out_json.display()))?;
+    tracing::info!(total, "build: wrote {}", out_json.display());
 
     // Without --fields, mmdbctl infers the field list from the first JSON object
     // only, silently dropping any field absent from that first record.
