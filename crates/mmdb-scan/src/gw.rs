@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 
 use ipnet::IpNet;
-use mmdb_core::types::{GatewayInfo, Hop, ScanGwRecord, ScanRecord, WhoisData};
+use mmdb_core::types::{GatewayInfo, Hop, ScanGwRecord, ScanRecord, WhoisData, XlsxMatchStatus};
 
 use crate::ptr_parse::{self, CompiledPattern};
 
@@ -112,7 +112,7 @@ fn resolve_range<S: ::std::hash::BuildHasher>(
             host_ptr: None,
             measured_at,
             xlsx: None,
-            xlsx_matched: false,
+            xlsx_matched: XlsxMatchStatus::default(),
             gateway_found: false,
         };
     }
@@ -145,7 +145,7 @@ fn resolve_range<S: ::std::hash::BuildHasher>(
             host_ptr: None,
             measured_at,
             xlsx: None,
-            xlsx_matched: false,
+            xlsx_matched: XlsxMatchStatus::default(),
             gateway_found: false,
         };
     };
@@ -188,7 +188,7 @@ fn resolve_range<S: ::std::hash::BuildHasher>(
                 host_ptr: None,
                 measured_at,
                 xlsx: None,
-                xlsx_matched: false,
+                xlsx_matched: XlsxMatchStatus::default(),
                 gateway_found: false,
             }
         }
@@ -216,7 +216,7 @@ fn resolve_range<S: ::std::hash::BuildHasher>(
             host_ptr: None,
             measured_at,
             xlsx: None,
-            xlsx_matched: false,
+            xlsx_matched: XlsxMatchStatus::default(),
             gateway_found: false,
         },
     }

@@ -54,7 +54,7 @@ pub async fn run(_config: &Config, input: &Path, output: &Path) -> Result<()> {
         if record.gateway_found {
             inservice = inservice.saturating_add(1);
         }
-        if record.xlsx_matched {
+        if record.xlsx_matched.any() {
             xlsx_matched = xlsx_matched.saturating_add(1);
         }
         total = total.saturating_add(1);

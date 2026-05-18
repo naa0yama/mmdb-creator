@@ -182,9 +182,18 @@ async fn main() -> anyhow::Result<()> {
                 input_enrich_file,
                 input_enrich_ip,
                 mmdb,
+                init_fields,
             } => {
                 let mmdb = mmdb.unwrap_or_else(|| config.mmdb.path.clone());
-                enrich::run(&config, &input_enrich_file, &input_enrich_ip, &mmdb).await?;
+                enrich::run(
+                    &config,
+                    &args.config,
+                    &input_enrich_file,
+                    &input_enrich_ip,
+                    &mmdb,
+                    init_fields,
+                )
+                .await?;
             }
         }
 

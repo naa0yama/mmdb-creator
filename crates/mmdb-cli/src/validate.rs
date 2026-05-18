@@ -687,6 +687,7 @@ mod tests {
             scan: None,
             mmdb: mmdb_core::config::MmdbConfig::default(),
             normalize: std::collections::HashMap::new(),
+            enrich: None,
         }
     }
 
@@ -1433,6 +1434,7 @@ mod tests {
                 scan: None,
                 mmdb: mmdb_core::config::MmdbConfig::default(),
                 normalize: std::collections::HashMap::new(),
+                enrich: None,
             }
         }
 

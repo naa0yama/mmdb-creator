@@ -75,6 +75,9 @@ pub enum Command {
         /// MMDB file to use for lookups (default: config.mmdb.path)
         #[arg(short = 'm', long)]
         mmdb: Option<PathBuf>,
+        /// Interactively select MMDB fields to enrich with (writes [enrich] to config.toml)
+        #[arg(long)]
+        init_fields: bool,
     },
 }
 
@@ -299,5 +302,26 @@ mod tests {
     #[test]
     fn enrich_missing_file_is_invalid() {
         assert!(try_parse(&["prog", "enrich", "--input-enrich-ip", "ip_address"]).is_err());
+    }
+
+    #[test]
+    fn enrich_init_fields_is_valid() {
+        assert!(
+            try_parse(&[
+                "prog",
+                "enrich",
+                "--input-enrich-file",
+                "access.jsonl",
+                "--input-enrich-ip",
+                "ip_address",
+                "--init-fields",
+            ])
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn enrich_init_fields_without_required_args_is_invalid() {
+        assert!(try_parse(&["prog", "enrich", "--init-fields"]).is_err());
     }
 }

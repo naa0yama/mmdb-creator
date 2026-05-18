@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use crate::types::{
     Continent, Country, GatewayExport, MmdbRecord, OperationalData, ScanGwRecord, WhoisExport,
+    XlsxMatchStatus,
 };
 
 /// Convert a [`ScanGwRecord`] to a [`MmdbRecord`] for mmdbctl NDJSON output.
@@ -35,7 +36,7 @@ pub fn to_mmdb_record(rec: &ScanGwRecord) -> MmdbRecord {
         whois,
         gateway,
         xlsx,
-        xlsx_matched: rec.xlsx.as_ref().is_some_and(|m| !m.is_empty()),
+        xlsx_matched: XlsxMatchStatus::from_xlsx_map(rec.xlsx.as_ref()),
         gateway_found: rec.gateway.status == "inservice",
     }
 }
@@ -194,7 +195,7 @@ mod tests {
 
     use serde_json::json;
 
-    use crate::types::{GatewayDevice, GatewayInfo, ScanGwRecord};
+    use crate::types::{GatewayDevice, GatewayInfo, ScanGwRecord, XlsxMatchStatus};
 
     use super::*;
 
@@ -237,7 +238,7 @@ mod tests {
                     "cableid": "C10001"
                 }),
             )])),
-            xlsx_matched: false,
+            xlsx_matched: XlsxMatchStatus::default(),
             gateway_found: false,
         }
     }
@@ -304,10 +305,12 @@ mod tests {
 
     #[test]
     fn to_mmdb_record_xlsx_matched_true() {
-        // base_record has xlsx = Some(...) and status = "inservice"
+        // base_record has xlsx = Some({"backbone": ...}) and status = "inservice"
         let rec = base_record();
         let mmdb = to_mmdb_record(&rec);
-        assert!(mmdb.xlsx_matched);
+        assert!(mmdb.xlsx_matched.any());
+        assert!(mmdb.xlsx_matched.backbone);
+        assert!(!mmdb.xlsx_matched.hosting);
         assert!(mmdb.gateway_found);
     }
 
@@ -316,7 +319,7 @@ mod tests {
         let mut rec = base_record();
         rec.xlsx = None;
         let mmdb = to_mmdb_record(&rec);
-        assert!(!mmdb.xlsx_matched);
+        assert!(!mmdb.xlsx_matched.any());
         assert!(mmdb.gateway_found);
     }
 
@@ -325,7 +328,9 @@ mod tests {
         let mut rec = base_record();
         rec.gateway.status = "no_ptr_match".to_owned();
         let mmdb = to_mmdb_record(&rec);
-        assert!(mmdb.xlsx_matched);
+        assert!(mmdb.xlsx_matched.any());
+        assert!(mmdb.xlsx_matched.backbone);
+        assert!(!mmdb.xlsx_matched.hosting);
         assert!(!mmdb.gateway_found);
     }
 
@@ -335,7 +340,7 @@ mod tests {
         rec.xlsx = None;
         rec.gateway.status = "no_hops".to_owned();
         let mmdb = to_mmdb_record(&rec);
-        assert!(!mmdb.xlsx_matched);
+        assert!(!mmdb.xlsx_matched.any());
         assert!(!mmdb.gateway_found);
     }
 
@@ -437,7 +442,9 @@ mod tests {
         ]));
 
         let mmdb = to_mmdb_record(&rec);
-        assert!(mmdb.xlsx_matched);
+        assert!(mmdb.xlsx_matched.any());
+        assert!(mmdb.xlsx_matched.backbone);
+        assert!(mmdb.xlsx_matched.hosting);
         let xlsx = mmdb.xlsx.as_ref().unwrap();
         assert_eq!(xlsx.len(), 2);
 
@@ -465,7 +472,9 @@ mod tests {
         )]));
 
         let mmdb = to_mmdb_record(&rec);
-        assert!(mmdb.xlsx_matched);
+        assert!(mmdb.xlsx_matched.any());
+        assert!(mmdb.xlsx_matched.backbone);
+        assert!(!mmdb.xlsx_matched.hosting);
         let xlsx = mmdb.xlsx.as_ref().unwrap();
         assert_eq!(xlsx.len(), 1);
         assert!(xlsx.contains_key("backbone"));
@@ -483,7 +492,9 @@ mod tests {
         )]));
 
         let mmdb = to_mmdb_record(&rec);
-        assert!(mmdb.xlsx_matched);
+        assert!(mmdb.xlsx_matched.any());
+        assert!(!mmdb.xlsx_matched.backbone);
+        assert!(mmdb.xlsx_matched.hosting);
         let xlsx = mmdb.xlsx.as_ref().unwrap();
         assert_eq!(xlsx.len(), 1);
         assert!(xlsx.contains_key("hosting"));
@@ -494,7 +505,7 @@ mod tests {
     fn to_mmdb_record_empty_xlsx_map_is_none() {
         let rec = record_with_xlsx(std::collections::HashMap::new());
         let mmdb = to_mmdb_record(&rec);
-        assert!(!mmdb.xlsx_matched);
+        assert!(!mmdb.xlsx_matched.any());
         assert!(mmdb.xlsx.is_none());
     }
 }
