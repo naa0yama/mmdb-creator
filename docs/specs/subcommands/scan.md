@@ -122,16 +122,17 @@ scan ループ ──result──► mpsc channel ──► writer タスク
 
 ### Hop Fields (grouped by probe_ttl)
 
-| Output field | scamper source       | Type             | Notes                        |
-| ------------ | -------------------- | ---------------- | ---------------------------- |
-| `hop`        | `probe_ttl`          | `u32`            | 1-indexed                    |
-| `ip`         | `addr`               | `Option<String>` | null for non-responding hops |
-| `rtt_avg`    | avg of `rtt`         | `Option<f64>`    |                              |
-| `rtt_best`   | min of `rtt`         | `Option<f64>`    |                              |
-| `rtt_worst`  | max of `rtt`         | `Option<f64>`    |                              |
-| `icmp_type`  | `icmp_type`          | `Option<u8>`     | 11=TTL exceeded / 0=reached  |
-| `asn`        | post-scan enrich     | `Option<u32>`    |                              |
-| `ptr`        | post-scan PTR lookup | `Option<String>` |                              |
+| Output field | scamper source       | Type                    | Notes                                      |
+| ------------ | -------------------- | ----------------------- | ------------------------------------------ |
+| `hop`        | `probe_ttl`          | `u32`                   | 1-indexed                                  |
+| `ip`         | `addr`               | `Option<String>`        | null for non-responding hops               |
+| `rtt_avg`    | avg of `rtt`         | `Option<f64>`           |                                            |
+| `rtt_best`   | min of `rtt`         | `Option<f64>`           |                                            |
+| `rtt_worst`  | max of `rtt`         | `Option<f64>`           |                                            |
+| `icmp_type`  | `icmp_type`          | `Option<u8>`            | 11=TTL exceeded / 0=reached                |
+| `asn`        | post-scan enrich     | `Option<u32>`           |                                            |
+| `ptr`        | post-scan PTR lookup | `Option<String>`        |                                            |
+| `device`     | derived from `ptr`   | `Option<GatewayDevice>` | null when PTR absent or matches no pattern |
 
 **Parsing rules:**
 
@@ -223,6 +224,13 @@ Walk hops from last to first. For each hop:
 | `"inservice"`    | At least one trace yielded a PTR match → backbone device identified |
 | `"no_hops"`      | Every trace for this range has an empty hops list                   |
 | `"no_ptr_match"` | Hops are present but no hop PTR matched any configured pattern      |
+
+### Per-hop Device Enrichment
+
+After gateway resolution, every hop in `routes` is enriched with its own `device` field by
+applying `ptr_parse::parse(hop.ptr, patterns)`. This is independent of the gateway hop's
+device: hops before the gateway, the gateway itself, and all hops in `no_ptr_match` records
+all go through the same enrichment. Hops with no PTR or a non-matching PTR keep `device: null`.
 
 ### Output Record
 
