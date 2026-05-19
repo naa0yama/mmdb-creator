@@ -181,6 +181,7 @@ pub fn parse_trace(json: &str) -> Result<RouteData> {
                 icmp_type: None,
                 asn: None,
                 ptr: None,
+                device: None,
             });
             continue;
         };
@@ -233,6 +234,7 @@ pub fn parse_trace(json: &str) -> Result<RouteData> {
             icmp_type,
             asn: None,
             ptr: None,
+            device: None,
         });
     }
 

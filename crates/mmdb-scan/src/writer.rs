@@ -160,6 +160,7 @@ mod tests {
                     icmp_type: Some(0),
                     asn: None,
                     ptr: None,
+                    device: None,
                 }],
             },
         }

@@ -414,6 +414,7 @@ mod tests {
                 icmp_type: Some(11),
                 asn: None,
                 ptr: None,
+                device: None,
             })
             .collect();
         ScanRecord {

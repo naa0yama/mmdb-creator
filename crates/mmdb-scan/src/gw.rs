@@ -62,6 +62,14 @@ fn lpm_lookup<'a, S: ::std::hash::BuildHasher>(
         .map(|(_, data)| data)
 }
 
+fn enrich_hop(mut hop: Hop, patterns: &[CompiledPattern]) -> Hop {
+    hop.device = hop
+        .ptr
+        .as_deref()
+        .and_then(|p| ptr_parse::parse(p, patterns));
+    hop
+}
+
 #[allow(clippy::too_many_lines)]
 fn resolve_range<S: ::std::hash::BuildHasher>(
     range: &str,
@@ -120,7 +128,10 @@ fn resolve_range<S: ::std::hash::BuildHasher>(
     // Find gateway hop index (last hop whose PTR matches a pattern).
     let hops: Vec<&Hop> = agg.iter().map(|(h, _)| h).collect();
     let Some(idx) = ptr_candidate_index(&hops, patterns) else {
-        let routes = agg.into_iter().map(|(h, _)| h).collect();
+        let routes = agg
+            .into_iter()
+            .map(|(h, _)| enrich_hop(h, patterns))
+            .collect();
         return ScanGwRecord {
             range: range.to_owned(),
             netname,
@@ -155,14 +166,12 @@ fn resolve_range<S: ::std::hash::BuildHasher>(
     // built from `agg`, so the index is always valid.
     match agg.get(..=idx).and_then(<[_]>::split_last) {
         Some(((gw_hop, gw_votes), prefix)) => {
-            let device = gw_hop
-                .ptr
-                .as_deref()
-                .and_then(|p| ptr_parse::parse(p, patterns));
+            let enriched_gw = enrich_hop(gw_hop.clone(), patterns);
+            let device = enriched_gw.device.clone();
             let routes = prefix
                 .iter()
-                .map(|(h, _)| h.clone())
-                .chain(std::iter::once(gw_hop.clone()))
+                .map(|(h, _)| enrich_hop(h.clone(), patterns))
+                .chain(std::iter::once(enriched_gw))
                 .collect();
             ScanGwRecord {
                 range: range.to_owned(),
@@ -211,7 +220,10 @@ fn resolve_range<S: ::std::hash::BuildHasher>(
                 status: String::from("no_ptr_match"),
                 device: None,
             },
-            routes: agg.into_iter().map(|(h, _)| h).collect(),
+            routes: agg
+                .into_iter()
+                .map(|(h, _)| enrich_hop(h, patterns))
+                .collect(),
             host_ip: None,
             host_ptr: None,
             measured_at,
@@ -313,6 +325,7 @@ mod tests {
             icmp_type: Some(11),
             asn: None,
             ptr: ptr.map(str::to_owned),
+            device: None,
         }
     }
 
@@ -326,6 +339,7 @@ mod tests {
             icmp_type: None,
             asn: None,
             ptr: None,
+            device: None,
         }
     }
 
@@ -671,6 +685,72 @@ mod tests {
         assert_eq!(
             results[0].measured_at.as_deref(),
             Some("2026-05-01T09:00:00Z")
+        );
+    }
+
+    // --- hop device enrichment ---
+
+    #[test]
+    fn resolve_hop_device_populated() {
+        let patterns = compiled_patterns();
+        let records = [record(
+            "198.51.100.0/29",
+            vec![hop(1, "198.51.100.10", Some(GW_PTR))],
+        )];
+        let results = resolve(&records, &patterns, &HashMap::new());
+        let dev = results[0].routes[0].device.as_ref().unwrap();
+        assert_eq!(dev.device_role.as_deref(), Some("rtr"));
+        assert_eq!(dev.facility.as_deref(), Some("dc01"));
+    }
+
+    #[test]
+    fn resolve_hop_device_null_for_no_match() {
+        let patterns = compiled_patterns();
+        let records = [record(
+            "198.51.100.0/29",
+            vec![hop(1, "198.51.100.10", Some("host.customer.example.com"))],
+        )];
+        let results = resolve(&records, &patterns, &HashMap::new());
+        assert!(results[0].routes[0].device.is_none());
+    }
+
+    #[test]
+    fn resolve_hop_device_null_for_no_ptr() {
+        let patterns = compiled_patterns();
+        let records = [record(
+            "198.51.100.0/29",
+            vec![hop(1, "198.51.100.10", None)],
+        )];
+        let results = resolve(&records, &patterns, &HashMap::new());
+        assert!(results[0].routes[0].device.is_none());
+    }
+
+    #[test]
+    fn resolve_each_hop_device_independent() {
+        let patterns = compiled_patterns();
+        // hop1 → GW_PTR (rtr0101), hop2 → GW_PTR2 (rtr0102); last match is gateway
+        let records = [record(
+            "198.51.100.0/29",
+            vec![
+                hop(1, "198.51.100.10", Some(GW_PTR)),
+                hop(2, "198.51.100.11", Some(GW_PTR2)),
+            ],
+        )];
+        let results = resolve(&records, &patterns, &HashMap::new());
+        assert_eq!(results[0].routes.len(), 2);
+        assert_eq!(
+            results[0].routes[0]
+                .device
+                .as_ref()
+                .and_then(|d| d.device.as_deref()),
+            Some("rtr0101")
+        );
+        assert_eq!(
+            results[0].routes[1]
+                .device
+                .as_ref()
+                .and_then(|d| d.device.as_deref()),
+            Some("rtr0102")
         );
     }
 }
