@@ -79,6 +79,15 @@ pub enum Command {
         #[arg(long)]
         init_fields: bool,
     },
+    /// Generate an HTML Sankey topology report from scan results
+    Report {
+        /// Input scanned JSONL file
+        #[arg(long, default_value = "data/scanned.jsonl")]
+        input: PathBuf,
+        /// Output HTML file path
+        #[arg(long, default_value = "data/report.html")]
+        output: PathBuf,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -323,5 +332,35 @@ mod tests {
     #[test]
     fn enrich_init_fields_without_required_args_is_invalid() {
         assert!(try_parse(&["prog", "enrich", "--init-fields"]).is_err());
+    }
+
+    // --- report paths ---
+
+    #[test]
+    fn report_default_paths() {
+        let args = try_parse(&["prog", "report"]).unwrap();
+        let super::Command::Report { input, output } = args.command else {
+            panic!("expected Report");
+        };
+        assert_eq!(input, std::path::PathBuf::from("data/scanned.jsonl"));
+        assert_eq!(output, std::path::PathBuf::from("data/report.html"));
+    }
+
+    #[test]
+    fn report_custom_paths() {
+        let args = try_parse(&[
+            "prog",
+            "report",
+            "--input",
+            "custom.jsonl",
+            "--output",
+            "custom.html",
+        ])
+        .unwrap();
+        let super::Command::Report { input, output } = args.command else {
+            panic!("expected Report");
+        };
+        assert_eq!(input, std::path::PathBuf::from("custom.jsonl"));
+        assert_eq!(output, std::path::PathBuf::from("custom.html"));
     }
 }

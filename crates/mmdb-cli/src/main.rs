@@ -7,6 +7,7 @@ mod cli;
 mod enrich;
 mod import;
 mod mmdb_query;
+mod report;
 #[cfg(unix)]
 mod scan;
 mod telemetry;
@@ -83,7 +84,10 @@ async fn main() -> anyhow::Result<()> {
     // Skip for `validate` subcommand (it runs its own full validation).
     if !matches!(
         args.command,
-        cli::Command::Validate { .. } | cli::Command::Enrich { .. } | cli::Command::Mmdb { .. }
+        cli::Command::Validate { .. }
+            | cli::Command::Enrich { .. }
+            | cli::Command::Mmdb { .. }
+            | cli::Command::Report { .. }
     ) && let Some(sheets) = &config.sheets
     {
         for (idx, sheet) in sheets.iter().enumerate() {
@@ -113,6 +117,7 @@ async fn main() -> anyhow::Result<()> {
             cli::Command::Scan { .. } => "scan",
             cli::Command::Validate { .. } => "validate",
             cli::Command::Enrich { .. } => "enrich",
+            cli::Command::Report { .. } => "report",
         };
 
         match args.command {
@@ -193,6 +198,9 @@ async fn main() -> anyhow::Result<()> {
                     init_fields,
                 )
                 .await?;
+            }
+            cli::Command::Report { input, output } => {
+                report::run(&input, &output)?;
             }
         }
 

@@ -58,6 +58,7 @@ config.toml
 data/backup/
 data/cache/
 data/input/
+data/*.html
 data/*.json
 data/*.jsonl
 data/*.mmdb

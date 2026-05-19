@@ -136,18 +136,21 @@ scan                      # scamper で CIDR をプローブ
 mmdb build                # scanned.jsonl から .mmdb を生成
         ↓
 enrich                    # アクセスログを .mmdb でエンリッチ
+        ↓
+report                    # Sankey トポロジー HTML レポート生成
 ```
 
 ### サブコマンド
 
-| コマンド                  | 説明                               | 主なフラグ                                     |
-| ------------------------- | ---------------------------------- | ---------------------------------------------- |
-| `mmdb-creator validate`   | 設定検証・シート列スキャフォールド | `--init-sheets` `--ptr` `--xlsx-rows`          |
-| `mmdb-creator import`     | WHOIS / XLSX データ取り込み        | `--asn` `--ip` `--xlsx` `--whois` `--force`    |
-| `mmdb-creator scan`       | scamper で CIDR プローブ           | `--ip` `--full` `--force`                      |
-| `mmdb-creator mmdb build` | MMDB ビルド                        | `-o` (出力先) `-i` (入力 JSONL)                |
-| `mmdb-creator mmdb query` | MMDB 検索 (エイリアス: `mmdb q`)   | `-m` (MMDB パス) `<IPS>...`                    |
-| `mmdb-creator enrich`     | JSONL ログを MMDB でエンリッチ     | `--input-enrich-file` `--input-enrich-ip` `-m` |
+| コマンド                  | 説明                                | 主なフラグ                                     |
+| ------------------------- | ----------------------------------- | ---------------------------------------------- |
+| `mmdb-creator validate`   | 設定検証・シート列スキャフォールド  | `--init-sheets` `--ptr` `--xlsx-rows`          |
+| `mmdb-creator import`     | WHOIS / XLSX データ取り込み         | `--asn` `--ip` `--xlsx` `--whois` `--force`    |
+| `mmdb-creator scan`       | scamper で CIDR プローブ            | `--ip` `--full` `--force`                      |
+| `mmdb-creator mmdb build` | MMDB ビルド                         | `-o` (出力先) `-i` (入力 JSONL)                |
+| `mmdb-creator mmdb query` | MMDB 検索 (エイリアス: `mmdb q`)    | `-m` (MMDB パス) `<IPS>...`                    |
+| `mmdb-creator enrich`     | JSONL ログを MMDB でエンリッチ      | `--input-enrich-file` `--input-enrich-ip` `-m` |
+| `mmdb-creator report`     | Sankey トポロジー HTML レポート生成 | `--input` `--output`                           |
 
 ### 実行例
 
@@ -171,6 +174,9 @@ mmdb-creator mmdb query 198.51.100.1
 mmdb-creator enrich \
   --input-enrich-file access.jsonl \
   --input-enrich-ip src_ip
+
+# 7. Sankey HTML レポート生成
+mmdb-creator report
 ```
 
 ## 使い方 (開発タスク)
@@ -250,6 +256,7 @@ mise run pre-commit       # clean:sweep + fmt:check + clippy:strict + ast-grep +
 │   │   │   ├── enrich/         # エンリッチサブコマンド
 │   │   │   ├── import/         # インポートサブコマンド
 │   │   │   ├── scan/           # スキャンサブコマンド (thin wrapper)
+│   │   │   ├── report.rs       # レポートサブコマンド
 │   │   │   └── telemetry/      # OpenTelemetry 初期化
 │   │   ├── tests/
 │   │   │   └── integration_test.rs  # 統合テスト
@@ -257,6 +264,7 @@ mise run pre-commit       # clean:sweep + fmt:check + clippy:strict + ast-grep +
 │   │   └── Cargo.toml          # クレート設定
 │   ├── mmdb-dns/               # DNS 逆引き・AS 情報取得 (lib)
 │   ├── mmdb-scan/              # scamper 統合 / CIDR 展開 / enrich (lib)
+│   ├── mmdb-web/               # HTML レポート生成 (lib)
 │   ├── mmdb-whois/             # WHOIS / RPSL プレフィックス照会 + JSONL 書き出し (lib)
 │   └── mmdb-xlsx/              # Excel (xlsx) 読み込み・フィルタ・JSONL 書き出し (lib)
 ├── docs/                       # ドキュメント

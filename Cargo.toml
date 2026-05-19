@@ -11,6 +11,7 @@ members = [
 	"crates/mmdb-core",
 	"crates/mmdb-dns",
 	"crates/mmdb-scan",
+	"crates/mmdb-web",
 	"crates/mmdb-whois",
 	"crates/mmdb-xlsx",
 ]
@@ -35,6 +36,7 @@ hickory-resolver = { version = "0.26", default-features = false, features = ["ht
 mmdb-core = { path = "crates/mmdb-core" }
 mmdb-dns = { path = "crates/mmdb-dns" }
 mmdb-scan = { path = "crates/mmdb-scan" }
+mmdb-web = { path = "crates/mmdb-web" }
 mmdb-whois = { path = "crates/mmdb-whois" }
 mmdb-xlsx = { path = "crates/mmdb-xlsx" }
 

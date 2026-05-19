@@ -1,0 +1,42 @@
+# - -------------------------------------------------------------------------------------------------
+# - Package
+# -
+[package]
+name = "mmdb-web"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "mmdb_web"
+path = "src/lib.rs"
+
+# - -------------------------------------------------------------------------------------------------
+# - Dependencies
+# -
+[dependencies]
+# Internal crates
+mmdb-core.workspace = true
+
+# Core
+anyhow.workspace = true
+
+# Data
+indexmap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+# Logging
+tracing.workspace = true
+
+# - -------------------------------------------------------------------------------------------------
+# - Dev Dependencies
+# -
+[dev-dependencies]
+# - -------------------------------------------------------------------------------------------------
+# - Lints
+# -
+[lints]
+workspace = true
