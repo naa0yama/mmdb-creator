@@ -1,6 +1,6 @@
 //! Sankey diagram data model and conversion logic for `ECharts`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use indexmap::IndexSet;
 use mmdb_core::types::ScanGwRecord;
@@ -50,7 +50,13 @@ fn hop_name(ip: Option<&str>, ptr: Option<&str>) -> String {
 }
 
 /// Increments the aggregated link count for a `(source, target)` pair.
+///
+/// Self-links (`source == target`) are silently dropped because `ECharts` Sankey
+/// does not support them and will refuse to render the entire chart.
 fn add_link(source: &str, target: &str, links: &mut HashMap<(String, String), usize>) {
+    if source == target {
+        return;
+    }
     let key = (source.to_owned(), target.to_owned());
     let count = links.entry(key).or_insert(0);
     *count = count.saturating_add(1);
@@ -102,6 +108,32 @@ pub fn build(records: &[ScanGwRecord]) -> SankeyData {
             add_link(last, &record.range, &mut link_map);
         }
     }
+
+    // Assign canonical depth (shortest path from Internet) via BFS, then drop
+    // any back-edge whose target depth ≤ source depth.  This breaks all cycles
+    // that would cause ECharts to reject the graph as non-DAG.
+    let mut depth: HashMap<String, usize> = HashMap::new();
+    let mut queue: VecDeque<String> = VecDeque::new();
+    depth.insert(INTERNET.to_owned(), 0);
+    queue.push_back(INTERNET.to_owned());
+    {
+        let mut adj: HashMap<String, Vec<String>> = HashMap::new();
+        for (src, tgt) in link_map.keys() {
+            adj.entry(src.clone()).or_default().push(tgt.clone());
+        }
+        while let Some(node) = queue.pop_front() {
+            let d = depth.get(&node).copied().unwrap_or(0);
+            for neighbor in adj.get(&node).into_iter().flatten() {
+                if !depth.contains_key(neighbor) {
+                    depth.insert(neighbor.clone(), d.saturating_add(1));
+                    queue.push_back(neighbor.clone());
+                }
+            }
+        }
+    }
+    link_map.retain(
+        |(src, tgt), _| matches!((depth.get(src), depth.get(tgt)), (Some(ds), Some(dt)) if dt > ds),
+    );
 
     let nodes = node_set
         .into_iter()
@@ -209,6 +241,21 @@ pub(crate) mod tests {
         let r2 = make_record("2001:db8::/32", vec![("2001:db8::1", None)]);
         let data = build(&[r1, r2]);
         assert!(!data.links.iter().any(|l| l.target == "Internet"));
+    }
+
+    #[test]
+    fn self_link_dropped() {
+        // A hop whose name resolves to the same string as the CIDR must not
+        // produce a self-link, which would make ECharts refuse to render.
+        let record = make_record(
+            "198.51.100.0/24",
+            vec![("198.51.100.1", Some("198.51.100.0/24"))],
+        );
+        let data = build(&[record]);
+        assert!(
+            !data.links.iter().any(|l| l.source == l.target),
+            "self-links must be absent"
+        );
     }
 
     #[test]
