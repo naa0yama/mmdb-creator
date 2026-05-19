@@ -344,6 +344,9 @@ pub struct Hop {
     /// Reverse DNS PTR record; populated during post-scan enrichment.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ptr: Option<String>,
+    /// Parsed device info from PTR; null when PTR is absent or matches no pattern.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device: Option<GatewayDevice>,
 }
 
 #[cfg(test)]
