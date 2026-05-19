@@ -10,14 +10,14 @@ and DaisyUI for UI components.
 
 Each hop in the network path can be labeled at six granularity levels:
 
-| Level       | JS key        | Label source                                              | Fallback                  |
-| ----------- | ------------- | --------------------------------------------------------- | ------------------------- |
-| ASN         | `asn`         | `hop.asn` → `"AS{n}"`                                     | PTR → IP → `"*"`          |
-| Facility    | `facility`    | `hop.device.facility`                                     | PTR → IP → `"*"`          |
-| Device Role | `device_role` | `hop.device.device_role`                                  | PTR → IP → `"*"`          |
-| Device      | `device`      | `hop.device.device` (default)                             | PTR → IP → `"*"`          |
-| Interface   | `interface`   | `[hop.device.device, hop.device.interface]` (2-node span) | Device → PTR → IP → `"*"` |
-| PTR/IP      | `ptr`         | PTR string or IP address                                  | IP → `"*"`                |
+| Level       | JS key        | Label source                                     | Fallback                  |
+| ----------- | ------------- | ------------------------------------------------ | ------------------------- |
+| ASN         | `asn`         | `hop.asn` → `"AS{n}"`                            | PTR → IP → `"*"`          |
+| Facility    | `facility`    | `hop.device.facility`                            | PTR → IP → `"*"`          |
+| Device Role | `device_role` | `hop.device.device_role`                         | PTR → IP → `"*"`          |
+| Device      | `device`      | `hop.device.device` (default)                    | PTR → IP → `"*"`          |
+| Interface   | `interface`   | `[device, "{device}/{interface}"]` (2-node span) | Device → PTR → IP → `"*"` |
+| PTR/IP      | `ptr`         | PTR string or IP address                         | IP → `"*"`                |
 
 ### Architecture
 
@@ -43,8 +43,10 @@ pub struct AllSankeyData {
 
 `build_all(records)` calls `build(records, granularity)` for each variant.
 `hop_nodes(hop, granularity)` resolves the label(s) with the fallback chain above.
-`Interface` granularity may return a 2-element vec `[device, interface]`, expanding
-one hop into two consecutive Sankey nodes.
+`Interface` granularity may return a 2-element vec `[device, "{device}/{interface}"]`,
+expanding one hop into two consecutive Sankey nodes. The interface node is qualified
+with the device name so that identically-named interfaces on different devices remain
+distinct nodes in the graph.
 
 **JavaScript state:**
 
