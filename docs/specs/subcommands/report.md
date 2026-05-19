@@ -31,8 +31,12 @@ The generated HTML page:
 - Loads `ECharts` v5 and `DaisyUI` v4 from CDN (requires network access).
 - Renders a Sankey diagram: `Internet` → hop nodes → destination CIDRs.
 - Provides a text `<input>` to filter nodes by IP or CIDR string (pure JS).
-- Uses DaisyUI drawer layout with a sidebar (category: Network / Topology).
-- Sets `data-theme="dark"`.
+  - Filter expands selection via BFS: upstream toward `Internet` and downstream
+    toward destination CIDRs are included automatically.
+  - Clicking a node in the chart sets the filter to that node's name.
+  - Clicking the `Internet` node or the clear button (`✕`) resets the filter.
+- Uses a two-column flex layout: fixed sidebar (Network / Topology) + main area.
+- Chart height is computed dynamically so each node gets at least 20 px.
 
 ### Sankey Data Model
 
@@ -49,6 +53,11 @@ struct SankeyData { nodes: Vec<SankeyNode>, links: Vec<SankeyLink> }
 3. Hop node name priority: PTR (if `Some` and `!= "*"`) → IP → `"*"`.
 4. Links: `"Internet"` → `routes[0]`, then consecutive hops, then last hop → `record.range`.
 5. Duplicate `(source, target)` pairs accumulate value via `saturating_add`.
+6. Self-links (`source == target`) are silently dropped — `ECharts` Sankey does
+   not support them and will refuse to render.
+7. Cycles are broken via BFS from `Internet`: each node is assigned its shortest
+   depth, and any back-edge whose target depth ≤ source depth is removed,
+   ensuring the graph is a DAG that `ECharts` accepts.
 
 ## Phase 2 (Future)
 
