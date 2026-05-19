@@ -32,6 +32,14 @@ pub fn render(sankey_json: &str) -> String {
   </aside>
   <main>
     <div id="filter-bar" class="bg-base-100">
+      <select id="granularity" class="select select-bordered select-sm">
+        <option value="asn">ASN</option>
+        <option value="facility">Facility</option>
+        <option value="device_role">Device Role</option>
+        <option value="device" selected>Device</option>
+        <option value="interface">Interface</option>
+        <option value="ptr">PTR/IP</option>
+      </select>
       <input id="filter" type="text" placeholder="Filter by IP or CIDR… (node click to select)"
              class="input input-bordered input-sm">
       <button id="clear-btn" class="btn btn-sm btn-ghost" style="display:none">✕</button>
@@ -42,18 +50,28 @@ pub fn render(sankey_json: &str) -> String {
   </main>
   <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
   <script>
-    const SANKEY_DATA = {sankey_json};
+    const SANKEY_DATASETS = {sankey_json};
 
     // nodeGap must match the value passed to ECharts series below.
     const NODE_GAP = 4;
 
-    // Precompute adjacency maps once; SANKEY_DATA is static.
-    const PREDS = {{}}, SUCCS = {{}};
-    for (const l of SANKEY_DATA.links) {{
-      (PREDS[l.target] = PREDS[l.target] || []).push(l.source);
-      (SUCCS[l.source] = SUCCS[l.source] || []).push(l.target);
+    const DEFAULT_GRANULARITY = 'device';
+    const initKey = (location.hash.slice(1) in SANKEY_DATASETS)
+      ? location.hash.slice(1) : DEFAULT_GRANULARITY;
+    let currentData = SANKEY_DATASETS[initKey];
+
+    // Adjacency maps rebuilt whenever granularity changes.
+    let PREDS = {{}}, SUCCS = {{}}, NODE_NAMES_LC = [];
+
+    function rebuildIndex(data) {{
+      PREDS = {{}}; SUCCS = {{}}; NODE_NAMES_LC = [];
+      for (const l of data.links) {{
+        (PREDS[l.target] = PREDS[l.target] || []).push(l.source);
+        (SUCCS[l.source] = SUCCS[l.source] || []).push(l.target);
+      }}
+      NODE_NAMES_LC = data.nodes.map(n => n.name.toLowerCase());
     }}
-    const NODE_NAMES_LC = SANKEY_DATA.nodes.map(n => n.name.toLowerCase());
+    rebuildIndex(currentData);
 
     // Compute chart height so each node in the tallest column gets >= 20px.
     // Formula accounts for ECharts series padding (uses 90% of chart height)
@@ -83,7 +101,7 @@ pub fn render(sankey_json: &str) -> String {
     const chartEl  = document.getElementById('chart');
     const filterEl  = document.getElementById('filter');
     const clearBtn  = document.getElementById('clear-btn');
-    const h0 = calcHeight(SANKEY_DATA);
+    const h0 = calcHeight(currentData);
     chartEl.style.height = h0 + 'px';
     // Pass height explicitly so ECharts does not rely on CSS reflow timing.
     const chart = echarts.init(chartEl, null, {{ height: h0 }});
@@ -102,16 +120,16 @@ pub fn render(sankey_json: &str) -> String {
     function applyFilter(q) {{
       filterEl.value = q;
       clearBtn.style.display = q ? '' : 'none';
-      if (!q) {{ renderChart(SANKEY_DATA); return; }}
+      if (!q) {{ renderChart(currentData); return; }}
       const ql = q.toLowerCase();
       const matched = new Set(
-        SANKEY_DATA.nodes.filter((_, i) => NODE_NAMES_LC[i].includes(ql)).map(n => n.name)
+        currentData.nodes.filter((_, i) => NODE_NAMES_LC[i].includes(ql)).map(n => n.name)
       );
       if (matched.size === 0) {{ renderChart({{ nodes: [], links: [] }}); return; }}
       const nodeSet = new Set(matched);
       bfsExpand(matched, PREDS, nodeSet);
       bfsExpand(matched, SUCCS, nodeSet);
-      const links = SANKEY_DATA.links.filter(l => nodeSet.has(l.source) && nodeSet.has(l.target));
+      const links = currentData.links.filter(l => nodeSet.has(l.source) && nodeSet.has(l.target));
       renderChart({{ nodes: [...nodeSet].map(n => ({{ name: n }})), links }});
     }}
 
@@ -137,7 +155,11 @@ pub fn render(sankey_json: &str) -> String {
         }}]
       }});
     }}
-    renderChart(SANKEY_DATA);
+    renderChart(currentData);
+
+    // Set granularity select to match the active dataset key.
+    const granularityEl = document.getElementById('granularity');
+    granularityEl.value = initKey;
 
     // Node click: filter by the clicked node name; Internet click clears filter.
     chart.on('click', function(params) {{
@@ -149,6 +171,22 @@ pub fn render(sankey_json: &str) -> String {
     filterEl.addEventListener('input', function() {{ applyFilter(this.value.trim()); }});
     clearBtn.addEventListener('click', function() {{ applyFilter(''); }});
     window.addEventListener('resize', () => chart.resize());
+
+    function switchGranularity(key) {{
+      granularityEl.value = key;
+      currentData = SANKEY_DATASETS[key];
+      rebuildIndex(currentData);
+      applyFilter(filterEl.value.trim());
+    }}
+    granularityEl.addEventListener('change', function() {{
+      location.hash = this.value;
+      switchGranularity(this.value);
+    }});
+    window.addEventListener('hashchange', function() {{
+      const key = (location.hash.slice(1) in SANKEY_DATASETS)
+        ? location.hash.slice(1) : DEFAULT_GRANULARITY;
+      switchGranularity(key);
+    }});
   </script>
 </body>
 </html>"#,

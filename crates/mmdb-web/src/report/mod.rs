@@ -12,8 +12,8 @@ use mmdb_core::types::ScanGwRecord;
 ///
 /// Returns an error if JSON serialisation fails.
 pub fn generate(records: &[ScanGwRecord]) -> Result<String> {
-    let data = sankey::build(records);
-    let json = serde_json::to_string(&data)?;
+    let all = sankey::build_all(records);
+    let json = serde_json::to_string(&all)?;
     Ok(template::render(&json))
 }
 
@@ -32,7 +32,19 @@ mod tests {
         assert!(html.contains("<!DOCTYPE html>"), "must be valid HTML");
         assert!(html.contains(r#"data-theme="dark""#), "must use dark theme");
         assert!(html.contains("198.51.100.0/24"), "must contain CIDR");
-        assert!(html.contains("SANKEY_DATA"), "must inject sankey data");
+        assert!(
+            html.contains(r#""device_role""#),
+            "must contain device_role key in JSON"
+        );
+        assert!(
+            html.contains(r#""facility""#),
+            "must contain facility key in JSON"
+        );
+        assert!(
+            html.contains(r#""interface""#),
+            "must contain interface key in JSON"
+        );
+        assert!(html.contains(r#""ptr""#), "must contain ptr key in JSON");
         Ok(())
     }
 }
