@@ -213,15 +213,15 @@ mod tests {
             whois_last_modified: Some("2025-01-15T00:00:00Z".to_owned()),
             gateway: GatewayInfo {
                 ip: Some("198.51.100.1".to_owned()),
-                ptr: Some("xe-0-0-1.rtr0101.colo05.example.com".to_owned()),
+                ptr: Some("xe-0-0-1.rtr01.dc05.example.com".to_owned()),
                 votes: 7,
                 total: 7,
                 status: "inservice".to_owned(),
                 device: Some(GatewayDevice {
                     interface: Some("xe-0-0-1".to_owned()),
-                    device: Some("rtr0101".to_owned()),
+                    device: Some("rtr01".to_owned()),
                     device_role: Some("rtr".to_owned()),
-                    facility: Some("colo05".to_owned()),
+                    facility: Some("dc05".to_owned()),
                     facing: Some("user".to_owned()),
                     customer_asn: None,
                 }),
@@ -233,7 +233,7 @@ mod tests {
             xlsx: Some(std::collections::HashMap::from([(
                 "backbone".to_owned(),
                 json!({
-                    "_source": {"file": "IPAM.xlsx", "sheet": "border1.ty1", "row_index": 0, "sheettype": "backbone"},
+                    "_source": {"file": "IPAM.xlsx", "sheet": "edge01.pop1", "row_index": 0, "sheettype": "backbone"},
                     "serviceid": "SVC-001",
                     "cableid": "C10001"
                 }),
@@ -270,15 +270,15 @@ mod tests {
 
         let gw = mmdb.gateway.as_ref().unwrap();
         assert_eq!(gw.ip.as_deref(), Some("198.51.100.1"));
-        assert_eq!(gw.device.as_deref(), Some("rtr0101"));
-        assert_eq!(gw.facility.as_deref(), Some("colo05"));
+        assert_eq!(gw.device.as_deref(), Some("rtr01"));
+        assert_eq!(gw.facility.as_deref(), Some("dc05"));
         assert_eq!(gw.interface.as_deref(), Some("xe-0-0-1"));
         assert_eq!(gw.facing.as_deref(), Some("user"));
 
         let xlsx = mmdb.xlsx.as_ref().unwrap();
         let bb = xlsx.get("backbone").unwrap();
         assert_eq!(bb.filename, "IPAM.xlsx");
-        assert_eq!(bb.sheetname, "border1.ty1");
+        assert_eq!(bb.sheetname, "edge01.pop1");
         assert_eq!(bb.fields["serviceid"], "SVC-001");
         assert_eq!(bb.fields["cableid"], "C10001");
         // _source must not leak into fields

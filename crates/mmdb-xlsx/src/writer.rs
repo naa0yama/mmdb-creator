@@ -147,13 +147,13 @@ mod tests {
     #[test]
     fn json_row_has_source_and_fields() {
         let mut fields = IndexMap::new();
-        fields.insert("host".to_owned(), CellValue::String("rtr0101".to_owned()));
+        fields.insert("host".to_owned(), CellValue::String("rtr01".to_owned()));
         fields.insert("port".to_owned(), CellValue::String("xe-0/0/1".to_owned()));
 
         let row = XlsxJsonlRow {
             source: XlsxSource {
                 file: "IPAM.xlsx".to_owned(),
-                sheet: "border1.ty1".to_owned(),
+                sheet: "edge01.pop1".to_owned(),
                 row_index: 3,
                 sheettype: SheetType::Backbone,
             },
@@ -161,9 +161,9 @@ mod tests {
         };
         let json: Value = serde_json::from_str(&serde_json::to_string(&row).unwrap()).unwrap();
         assert_eq!(json["_source"]["file"], "IPAM.xlsx");
-        assert_eq!(json["_source"]["sheet"], "border1.ty1");
+        assert_eq!(json["_source"]["sheet"], "edge01.pop1");
         assert_eq!(json["_source"]["row_index"], 3);
-        assert_eq!(json["host"], "rtr0101");
+        assert_eq!(json["host"], "rtr01");
         assert_eq!(json["port"], "xe-0/0/1");
     }
 
@@ -206,14 +206,14 @@ mod tests {
         let row = make_row(
             0,
             &[
-                ("host", CellValue::String("rtr0101".to_owned())),
+                ("host", CellValue::String("rtr01".to_owned())),
                 (
                     "network",
                     CellValue::Addresses(vec!["198.51.100.0/29".parse().unwrap()]),
                 ),
             ],
         );
-        let sheet = make_sheet("IPAM.xlsx", "border1.ty1", vec![row]);
+        let sheet = make_sheet("IPAM.xlsx", "edge01.pop1", vec![row]);
 
         super::write_jsonl(&[sheet], &path).await.unwrap();
 
@@ -223,8 +223,8 @@ mod tests {
 
         let parsed: Value = serde_json::from_str(lines[0]).unwrap();
         assert_eq!(parsed["_source"]["file"], "IPAM.xlsx");
-        assert_eq!(parsed["_source"]["sheet"], "border1.ty1");
-        assert_eq!(parsed["host"], "rtr0101");
+        assert_eq!(parsed["_source"]["sheet"], "edge01.pop1");
+        assert_eq!(parsed["host"], "rtr01");
         assert_eq!(parsed["network"], serde_json::json!(["198.51.100.0/29"]));
     }
 

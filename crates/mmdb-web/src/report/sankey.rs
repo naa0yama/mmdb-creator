@@ -49,7 +49,7 @@ pub enum SankeyGranularity {
     /// Label hops by device name from device metadata.
     #[default]
     Device,
-    /// Expand each hop into `[device, interface]` nodes when both fields are present.
+    /// Expand each hop into `[device, "{device}/{interface}"]` nodes when both fields are present.
     Interface,
     /// Label hops by exact PTR string or IP address (original pre-granularity behaviour).
     Ptr,
@@ -91,7 +91,7 @@ fn hop_name(ip: Option<&str>, ptr: Option<&str>) -> String {
 ///
 /// Returns a one-element `Vec` for most granularities. Returns a two-element
 /// `Vec` for [`SankeyGranularity::Interface`] when both `device` and `interface`
-/// fields are present, expanding the hop into `[device, interface]` nodes.
+/// fields are present, expanding the hop into `[device, "{device}/{interface}"]` nodes.
 ///
 /// Falls back to [`hop_name`] when the requested field is absent.
 fn hop_nodes(hop: &Hop, granularity: SankeyGranularity) -> Vec<String> {
@@ -122,7 +122,10 @@ fn hop_nodes(hop: &Hop, granularity: SankeyGranularity) -> Vec<String> {
             let device_str = dev_ref.and_then(|d| d.device.as_deref());
             let iface_str = dev_ref.and_then(|d| d.interface.as_deref());
             match (device_str, iface_str) {
-                (Some(dev), Some(iface)) => vec![dev.to_owned(), iface.to_owned()],
+                // Qualify the interface node with the device name so that
+                // identically-named interfaces on different devices (e.g.
+                // xe-0-0-0 on edge01 vs edge02) remain distinct nodes.
+                (Some(dev), Some(iface)) => vec![dev.to_owned(), format!("{dev}/{iface}")],
                 (Some(dev), None) => vec![dev.to_owned()],
                 _ => vec![fallback()],
             }
@@ -395,12 +398,12 @@ pub(crate) mod tests {
             interface: None,
             device: None,
             device_role: None,
-            facility: Some("colo05".to_owned()),
+            facility: Some("dc05".to_owned()),
             facing: None,
             customer_asn: None,
         };
         let hop = make_hop(Some("198.51.100.1"), None, Some(dev));
-        assert_eq!(hop_nodes(&hop, SankeyGranularity::Facility), vec!["colo05"]);
+        assert_eq!(hop_nodes(&hop, SankeyGranularity::Facility), vec!["dc05"]);
 
         let hop_no_dev = make_hop(Some("198.51.100.1"), None, None);
         assert_eq!(
@@ -433,14 +436,14 @@ pub(crate) mod tests {
     fn hop_nodes_device() {
         let dev = GatewayDevice {
             interface: None,
-            device: Some("rtr0101".to_owned()),
+            device: Some("rtr01".to_owned()),
             device_role: None,
             facility: None,
             facing: None,
             customer_asn: None,
         };
         let hop = make_hop(Some("198.51.100.1"), None, Some(dev));
-        assert_eq!(hop_nodes(&hop, SankeyGranularity::Device), vec!["rtr0101"]);
+        assert_eq!(hop_nodes(&hop, SankeyGranularity::Device), vec!["rtr01"]);
 
         let hop_no_dev = make_hop(Some("198.51.100.1"), None, None);
         assert_eq!(
@@ -472,7 +475,7 @@ pub(crate) mod tests {
         // device + interface both present → 2-element vec.
         let dev = GatewayDevice {
             interface: Some("xe-0-0-0".to_owned()),
-            device: Some("tedge0508".to_owned()),
+            device: Some("rtr-example-a".to_owned()),
             device_role: None,
             facility: None,
             facing: None,
@@ -481,7 +484,7 @@ pub(crate) mod tests {
         let hop = make_hop(Some("198.51.100.1"), None, Some(dev));
         assert_eq!(
             hop_nodes(&hop, SankeyGranularity::Interface),
-            vec!["tedge0508", "xe-0-0-0"]
+            vec!["rtr-example-a", "rtr-example-a/xe-0-0-0"]
         );
     }
 
@@ -490,7 +493,7 @@ pub(crate) mod tests {
         // device present but interface absent → 1-element vec (same as Device).
         let dev = GatewayDevice {
             interface: None,
-            device: Some("tedge0508".to_owned()),
+            device: Some("rtr-example-a".to_owned()),
             device_role: None,
             facility: None,
             facing: None,
@@ -499,7 +502,7 @@ pub(crate) mod tests {
         let hop = make_hop(Some("198.51.100.1"), None, Some(dev));
         assert_eq!(
             hop_nodes(&hop, SankeyGranularity::Interface),
-            vec!["tedge0508"]
+            vec!["rtr-example-a"]
         );
     }
 
@@ -516,12 +519,12 @@ pub(crate) mod tests {
     #[test]
     fn build_facility_merges_hops() {
         // Two records with different hop IPs but the same facility should produce
-        // a single "colo05" node, not two separate nodes.
+        // a single "dc05" node, not two separate nodes.
         let dev_a = GatewayDevice {
             interface: None,
             device: None,
             device_role: None,
-            facility: Some("colo05".to_owned()),
+            facility: Some("dc05".to_owned()),
             facing: None,
             customer_asn: None,
         };
@@ -529,7 +532,7 @@ pub(crate) mod tests {
             interface: None,
             device: None,
             device_role: None,
-            facility: Some("colo05".to_owned()),
+            facility: Some("dc05".to_owned()),
             facing: None,
             customer_asn: None,
         };
@@ -539,8 +542,8 @@ pub(crate) mod tests {
         r2.routes = vec![make_hop(Some("198.51.100.2"), None, Some(dev_b))];
 
         let data = build(&[r1, r2], SankeyGranularity::Facility);
-        let colo_count = data.nodes.iter().filter(|n| n.name == "colo05").count();
-        assert_eq!(colo_count, 1, "facility 'colo05' must appear exactly once");
+        let dc05_count = data.nodes.iter().filter(|n| n.name == "dc05").count();
+        assert_eq!(dc05_count, 1, "facility 'dc05' must appear exactly once");
     }
 
     #[test]
@@ -560,7 +563,7 @@ pub(crate) mod tests {
         // Single hop with device+interface → 4 nodes: Internet, device, interface, CIDR.
         let dev = GatewayDevice {
             interface: Some("xe-0-0-0".to_owned()),
-            device: Some("tedge0508".to_owned()),
+            device: Some("rtr-example-a".to_owned()),
             device_role: None,
             facility: None,
             facing: None,
@@ -571,46 +574,49 @@ pub(crate) mod tests {
 
         let data = build(&[record], SankeyGranularity::Interface);
         let names: Vec<&str> = data.nodes.iter().map(|n| n.name.as_str()).collect();
-        assert!(names.contains(&"tedge0508"), "device node must be present");
         assert!(
-            names.contains(&"xe-0-0-0"),
-            "interface node must be present"
+            names.contains(&"rtr-example-a"),
+            "device node must be present"
         );
-        // Links: Internet→tedge0508, tedge0508→xe-0-0-0, xe-0-0-0→198.51.100.0/24
+        assert!(
+            names.contains(&"rtr-example-a/xe-0-0-0"),
+            "interface node must be present as device/interface"
+        );
+        // Links: Internet→rtr-example-a, rtr-example-a→rtr-example-a/xe-0-0-0, …→CIDR
         assert!(
             data.links
                 .iter()
-                .any(|l| l.source == "Internet" && l.target == "tedge0508"),
+                .any(|l| l.source == "Internet" && l.target == "rtr-example-a"),
             "Internet→device link required"
         );
         assert!(
             data.links
                 .iter()
-                .any(|l| l.source == "tedge0508" && l.target == "xe-0-0-0"),
+                .any(|l| l.source == "rtr-example-a" && l.target == "rtr-example-a/xe-0-0-0"),
             "device→interface link required"
         );
         assert!(
             data.links
                 .iter()
-                .any(|l| l.source == "xe-0-0-0" && l.target == "198.51.100.0/24"),
+                .any(|l| l.source == "rtr-example-a/xe-0-0-0" && l.target == "198.51.100.0/24"),
             "interface→CIDR link required"
         );
     }
 
     #[test]
     fn build_interface_multihop() {
-        // Two hops: (agg, et-0-0-0) then (tedge, xe-0-0-0).
+        // Two hops: (rtr-example-b, et-0-0-0) then (rtr-example-c, xe-0-0-0).
         let dev_agg = GatewayDevice {
             interface: Some("et-0-0-0".to_owned()),
-            device: Some("agg".to_owned()),
+            device: Some("rtr-example-b".to_owned()),
             device_role: None,
             facility: None,
             facing: None,
             customer_asn: None,
         };
-        let dev_tedge = GatewayDevice {
+        let dev_edge = GatewayDevice {
             interface: Some("xe-0-0-0".to_owned()),
-            device: Some("tedge".to_owned()),
+            device: Some("rtr-example-c".to_owned()),
             device_role: None,
             facility: None,
             facing: None,
@@ -619,16 +625,16 @@ pub(crate) mod tests {
         let mut record = make_record("198.51.100.0/24", vec![]);
         record.routes = vec![
             make_hop(Some("198.51.100.1"), None, Some(dev_agg)),
-            make_hop(Some("198.51.100.2"), None, Some(dev_tedge)),
+            make_hop(Some("198.51.100.2"), None, Some(dev_edge)),
         ];
 
         let data = build(&[record], SankeyGranularity::Interface);
-        // Expected chain: Internet → agg → et-0-0-0 → tedge → xe-0-0-0 → CIDR
+        // Expected chain: Internet → rtr-example-b → rtr-example-b/et-0-0-0 → rtr-example-c → …
         assert!(
             data.links
                 .iter()
-                .any(|l| l.source == "et-0-0-0" && l.target == "tedge"),
-            "et-0-0-0→tedge link required"
+                .any(|l| l.source == "rtr-example-b/et-0-0-0" && l.target == "rtr-example-c"),
+            "rtr-example-b/et-0-0-0→rtr-example-c link required"
         );
     }
 

@@ -79,7 +79,7 @@ cache_dir = "data/cache/import"
 # # groups: sheet tab names whose duplicate CIDRs are permitted with each other.
 # # Each inner list is one redundancy group; two sheets are exempt when their
 # # group-ID sets intersect.
-# # groups = [["border1.ty1", "border1.ty2"], ["core1", "core2"]]
+# # groups = [["edge01.pop1", "edge01.pop2"], ["core01", "core02"]]
 #
 # [[sheets.columns]]
 # name = "host"
@@ -179,7 +179,7 @@ cache_dir = "data/cache/import"
 # Each entry requires a `regex` field with named capture groups.
 # Supported group names (all optional):
 #   interface    — interface name, e.g. "xe-0-0-1"
-#   device       — full device identifier, e.g. "rtr0101"
+#   device       — full device identifier, e.g. "rtr01"
 #   device_role  — role portion of the device name, e.g. "rtr"
 #   facility     — site or facility name, e.g. "dc01"
 #   facing       — raw prefix label ("user", "virtual", "user.virtual")
@@ -196,7 +196,7 @@ cache_dir = "data/cache/import"
 #
 # Option B: raw regex (backward-compatible; no {placeholder} expansion)
 # [[scan.ptr_patterns]]
-# domain = "example.ad.jp"
+# domain = "example.com"
 # regex = '''(?x)
 #   ^(?:(?P<facing>user(?:\.virtual)?|virtual)\.)?
 #   (?:as(?P<customer_asn>\d+)\.)?

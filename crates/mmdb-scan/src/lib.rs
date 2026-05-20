@@ -369,7 +369,7 @@ mod tests {
         let mut f = NamedTempFile::new().unwrap();
         writeln!(
             f,
-            r#"{{"_source":{{"file":"A.xlsx","sheet":"s1","row_index":0}},"host":"rtr0101","network":["198.51.100.0/29","198.51.100.8/29"]}}"#
+            r#"{{"_source":{{"file":"A.xlsx","sheet":"s1","row_index":0}},"host":"rtr01","network":["198.51.100.0/29","198.51.100.8/29"]}}"#
         )
         .unwrap();
         let cidrs = load_xlsx_cidrs(f.path()).unwrap();
@@ -385,7 +385,7 @@ mod tests {
         let mut f = NamedTempFile::new().unwrap();
         writeln!(
             f,
-            r#"{{"_source":{{"file":"A.xlsx","sheet":"s1","row_index":0}},"host":"rtr0101","vlanid":100}}"#
+            r#"{{"_source":{{"file":"A.xlsx","sheet":"s1","row_index":0}},"host":"rtr01","vlanid":100}}"#
         )
         .unwrap();
         let cidrs = load_xlsx_cidrs(f.path()).unwrap();

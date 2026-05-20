@@ -170,8 +170,8 @@ mod tests {
             make_config(&[], NormalizeCase::Upper),
         )]);
         let compiled = compile_all(&map).unwrap();
-        let result = apply(compiled.get("device").unwrap(), "rtr0101");
-        assert_eq!(result, "RTR0101");
+        let result = apply(compiled.get("device").unwrap(), "rtr01");
+        assert_eq!(result, "RTR01");
     }
 
     #[cfg_attr(miri, ignore)] // regex compilation is too slow under Miri
@@ -182,8 +182,8 @@ mod tests {
             make_config(&[], NormalizeCase::None),
         )]);
         let compiled = compile_all(&map).unwrap();
-        let result = apply(compiled.get("device").unwrap(), "RTR0101");
-        assert_eq!(result, "RTR0101");
+        let result = apply(compiled.get("device").unwrap(), "RTR01");
+        assert_eq!(result, "RTR01");
     }
 
     #[cfg_attr(miri, ignore)] // regex compilation is too slow under Miri
@@ -216,8 +216,8 @@ mod tests {
             make_config(&[], NormalizeCase::Lower),
         )]);
         let compiled = compile_all(&map).unwrap();
-        let result = apply(compiled.get("device").unwrap(), "rtr0101.dc01");
-        assert_eq!(result, "rtr0101.dc01");
+        let result = apply(compiled.get("device").unwrap(), "rtr01.dc01");
+        assert_eq!(result, "rtr01.dc01");
     }
 
     // ── interface normalize: compile + detection tests ────────────────────────

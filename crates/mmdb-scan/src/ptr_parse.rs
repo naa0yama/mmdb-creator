@@ -180,9 +180,9 @@ mod tests {
         compile(&[p]).unwrap().remove(0)
     }
 
-    fn bbtower_pattern() -> CompiledPattern {
+    fn sample_ptr_pattern() -> CompiledPattern {
         pattern(
-            Some("example.ad.jp"),
+            Some("example.com"),
             r"(?x)
               ^(?:(?P<facing>user(?:\.virtual)?|virtual)\.)?
               (?:as(?P<customer_asn>\d+)\.)?
@@ -190,21 +190,17 @@ mod tests {
               (?:\.[a-z]+\d+)?\.
               (?P<device>(?P<device_role>[a-z]+)\d+)\.
               (?P<facility>[a-z0-9]+)\.
-              example\.ad\.jp$",
+              example\.com$",
         )
     }
 
     #[cfg_attr(miri, ignore)] // regex compilation is too slow under Miri
     #[test]
     fn parse_user_virtual_xe() {
-        let patterns = vec![bbtower_pattern()];
-        let dev = parse(
-            "user.virtual.xe-0-0-1.rtr0101.dc01.example.ad.jp",
-            &patterns,
-        )
-        .unwrap();
+        let patterns = vec![sample_ptr_pattern()];
+        let dev = parse("user.virtual.xe-0-0-1.rtr01.dc01.example.com", &patterns).unwrap();
         assert_eq!(dev.interface.as_deref(), Some("xe-0-0-1"));
-        assert_eq!(dev.device.as_deref(), Some("rtr0101"));
+        assert_eq!(dev.device.as_deref(), Some("rtr01"));
         assert_eq!(dev.device_role.as_deref(), Some("rtr"));
         assert_eq!(dev.facility.as_deref(), Some("dc01"));
         assert_eq!(dev.facing.as_deref(), Some("user_virtual"));
@@ -214,24 +210,24 @@ mod tests {
     #[cfg_attr(miri, ignore)] // regex compilation is too slow under Miri
     #[test]
     fn parse_user_ge() {
-        let patterns = vec![bbtower_pattern()];
-        let dev = parse("user.ge-0-0-0.rtr0201.dc01.example.ad.jp", &patterns).unwrap();
+        let patterns = vec![sample_ptr_pattern()];
+        let dev = parse("user.ge-0-0-0.rtr02.dc01.example.com", &patterns).unwrap();
         assert_eq!(dev.facing.as_deref(), Some("user"));
     }
 
     #[cfg_attr(miri, ignore)] // regex compilation is too slow under Miri
     #[test]
     fn parse_network_facing() {
-        let patterns = vec![bbtower_pattern()];
-        let dev = parse("ge-0-0-0.rtr0201.dc01.example.ad.jp", &patterns).unwrap();
+        let patterns = vec![sample_ptr_pattern()];
+        let dev = parse("ge-0-0-0.rtr02.dc01.example.com", &patterns).unwrap();
         assert_eq!(dev.facing.as_deref(), Some("network"));
     }
 
     #[cfg_attr(miri, ignore)] // regex compilation is too slow under Miri
     #[test]
     fn parse_bgp_peer() {
-        let patterns = vec![bbtower_pattern()];
-        let dev = parse("as64496.xe-0-1-0.rtr0301.dc01.example.ad.jp", &patterns).unwrap();
+        let patterns = vec![sample_ptr_pattern()];
+        let dev = parse("as64496.xe-0-1-0.rtr03.dc01.example.com", &patterns).unwrap();
         assert_eq!(dev.facing.as_deref(), Some("bgp_peer"));
         assert_eq!(dev.customer_asn, Some(64496));
     }
@@ -239,43 +235,37 @@ mod tests {
     #[cfg_attr(miri, ignore)] // regex compilation is too slow under Miri
     #[test]
     fn parse_domain_filter_miss() {
-        let patterns = vec![bbtower_pattern()];
-        assert!(parse("ge-0-0-0.rtr0201.dc01.docs.example.com", &patterns).is_none());
+        let patterns = vec![sample_ptr_pattern()];
+        assert!(parse("ge-0-0-0.rtr02.dc01.example.net", &patterns).is_none());
     }
 
     #[cfg_attr(miri, ignore)] // regex compilation is too slow under Miri
     #[test]
     fn parse_domain_filter_hit() {
-        let patterns = vec![bbtower_pattern()];
-        assert!(parse("ge-0-0-0.rtr0201.dc01.example.ad.jp", &patterns).is_some());
+        let patterns = vec![sample_ptr_pattern()];
+        assert!(parse("ge-0-0-0.rtr02.dc01.example.com", &patterns).is_some());
     }
 
     #[cfg_attr(miri, ignore)] // regex compilation is too slow under Miri
     #[test]
     fn parse_no_patterns() {
-        assert!(parse("ge-0-0-0.rtr0201.dc01.example.ad.jp", &[]).is_none());
+        assert!(parse("ge-0-0-0.rtr02.dc01.example.com", &[]).is_none());
     }
 
     #[cfg_attr(miri, ignore)] // regex compilation is too slow under Miri
     #[test]
     fn parse_first_match_wins() {
-        let first = pattern(
-            Some("example.ad.jp"),
-            r"^(?P<device>first\d+)\.example\.ad\.jp$",
-        );
-        let second = pattern(
-            Some("example.ad.jp"),
-            r"^(?P<device>second\d+)\.example\.ad\.jp$",
-        );
+        let first = pattern(Some("example.com"), r"^(?P<device>rtr\d+)\.example\.com$");
+        let second = pattern(Some("example.com"), r"^(?P<device>edge\d+)\.example\.com$");
         let patterns = vec![first, second];
-        let dev = parse("first01.example.ad.jp", &patterns).unwrap();
-        assert_eq!(dev.device.as_deref(), Some("first01"));
+        let dev = parse("rtr01.example.com", &patterns).unwrap();
+        assert_eq!(dev.device.as_deref(), Some("rtr01"));
     }
 
     #[cfg_attr(miri, ignore)] // regex compilation is too slow under Miri
     #[test]
     fn parse_empty_ptr() {
-        let patterns = vec![bbtower_pattern()];
+        let patterns = vec![sample_ptr_pattern()];
         assert!(parse("", &patterns).is_none());
     }
 
@@ -329,8 +319,8 @@ mod tests {
             excludes: vec![],
         };
         let compiled = compile(&[p]).unwrap();
-        let dev = parse("rtr0101", &compiled);
-        assert_eq!(dev.unwrap().device.as_deref(), Some("rtr0101"));
+        let dev = parse("rtr01", &compiled);
+        assert_eq!(dev.unwrap().device.as_deref(), Some("rtr01"));
     }
 
     #[cfg_attr(miri, ignore)] // regex compilation is too slow under Miri
@@ -343,10 +333,10 @@ mod tests {
             excludes: vec![],
         };
         let compiled = compile(&[p]).unwrap();
-        let dev = parse("xe-0-0-1.rtr0101.dc01.example.net", &compiled);
+        let dev = parse("xe-0-0-1.rtr01.dc01.example.net", &compiled);
         let dev = dev.unwrap();
         assert_eq!(dev.interface.as_deref(), Some("xe-0-0-1"));
-        assert_eq!(dev.device.as_deref(), Some("rtr0101"));
+        assert_eq!(dev.device.as_deref(), Some("rtr01"));
         assert_eq!(dev.facility.as_deref(), Some("dc01"));
     }
 }

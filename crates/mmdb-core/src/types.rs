@@ -108,13 +108,13 @@ pub struct GatewayExport {
     /// PTR record of the gateway IP.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ptr: Option<String>,
-    /// Full device identifier parsed from PTR (e.g. `"rtr0101"`).
+    /// Full device identifier parsed from PTR (e.g. `"rtr01"`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub device: Option<String>,
     /// Role portion of the device name (e.g. `"rtr"`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub device_role: Option<String>,
-    /// Site or facility name parsed from PTR (e.g. `"colo05"`).
+    /// Site or facility name parsed from PTR (e.g. `"dc05"`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub facility: Option<String>,
     /// Interface name parsed from PTR (e.g. `"xe-0-0-1"`).
@@ -223,7 +223,7 @@ pub struct ScanRecord {
 pub struct GatewayDevice {
     /// Interface name (e.g. `"xe-0-0-1"`).
     pub interface: Option<String>,
-    /// Full device identifier (e.g. `"rtr0101"`).
+    /// Full device identifier (e.g. `"rtr01"`).
     pub device: Option<String>,
     /// Role portion of the device name (e.g. `"rtr"`).
     pub device_role: Option<String>,

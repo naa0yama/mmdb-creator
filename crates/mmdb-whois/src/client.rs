@@ -643,14 +643,11 @@ mod tests {
         let block: IpNet = "198.51.100.0/24".parse().unwrap();
         {
             let mut guard = client.iana_cache.lock().await;
-            *guard = Some(HashMap::from([(
-                block,
-                String::from("whois.cached-rir.net"),
-            )]));
+            *guard = Some(HashMap::from([(block, String::from("whois.example.net"))]));
         }
         let ip: IpAddr = "198.51.100.1".parse().unwrap();
         let server = client.resolve_server(ip).await;
-        assert_eq!(server, "whois.cached-rir.net");
+        assert_eq!(server, "whois.example.net");
     }
 
     #[test]

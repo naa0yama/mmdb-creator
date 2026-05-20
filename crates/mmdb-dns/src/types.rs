@@ -87,13 +87,13 @@ mod tests {
     #[test]
     fn dns_enrich_result_serde_round_trip() {
         let result = DnsEnrichResult {
-            asn: Some(13335),
-            prefix: Some("1.1.1.0/24".to_owned()),
-            country: Some("US".to_owned()),
-            registry: Some("arin".to_owned()),
-            allocated: Some("2010-07-14".to_owned()),
-            as_name: Some("CLOUDFLARENET".to_owned()),
-            ptr: Some("one.one.one.one".to_owned()),
+            asn: Some(64497),
+            prefix: Some("198.51.100.0/24".to_owned()),
+            country: Some("XX".to_owned()),
+            registry: Some("example".to_owned()),
+            allocated: Some("2001-01-01".to_owned()),
+            as_name: Some("EXAMPLE-NET".to_owned()),
+            ptr: Some("198.51.100.1.example.net".to_owned()),
         };
 
         let json = serde_json::to_string(&result).expect("serialize");

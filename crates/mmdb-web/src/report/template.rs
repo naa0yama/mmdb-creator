@@ -54,6 +54,11 @@ pub fn render(sankey_json: &str) -> String {
 
     // nodeGap must match the value passed to ECharts series below.
     const NODE_GAP = 4;
+    // Browser canvas height limit varies (16 384 px on most engines).
+    // Exceeding it causes a silent blank render, so we cap here.
+    const MAX_CANVAS_PX = 16000;
+    // Warn when the tallest column exceeds this many nodes.
+    const WARN_NODE_THRESHOLD = 500;
 
     const DEFAULT_GRANULARITY = 'device';
     const initKey = (location.hash.slice(1) in SANKEY_DATASETS)
@@ -76,6 +81,7 @@ pub fn render(sankey_json: &str) -> String {
     // Compute chart height so each node in the tallest column gets >= 20px.
     // Formula accounts for ECharts series padding (uses 90% of chart height)
     // and the gaps between nodes: h = (n*20 + (n-1)*nodeGap) / 0.9
+    // Returns {{ height, maxN }} so callers can show overflow warnings.
     function calcHeight(data) {{
       const depths = {{}};
       let head = 0;
@@ -94,14 +100,33 @@ pub fn render(sankey_json: &str) -> String {
       const cnt = {{}};
       for (const v of Object.values(depths)) cnt[v] = (cnt[v] || 0) + 1;
       const maxN = Math.max(...Object.values(cnt), 1);
+      // Return object so callers can inspect maxN for the overflow warning.
       const needed = Math.ceil((maxN * 20 + Math.max(0, maxN - 1) * NODE_GAP) / 0.9);
-      return Math.max(Math.round(window.innerHeight * 0.85), needed);
+      const natural = Math.max(Math.round(window.innerHeight * 0.85), needed);
+      return {{ height: Math.min(natural, MAX_CANVAS_PX), maxN }};
+    }}
+
+    function setOverflowNotice(maxN) {{
+      let el = document.getElementById('overflow-notice');
+      if (maxN > WARN_NODE_THRESHOLD) {{
+        if (!el) {{
+          el = document.createElement('div');
+          el.id = 'overflow-notice';
+          el.className = 'alert alert-warning text-sm mb-2';
+          el.style.cssText = 'padding:0.4rem 0.75rem;';
+          document.getElementById('chart-wrap').prepend(el);
+        }}
+        el.textContent = `⚠ 表示ノード数が多すぎます (最大列 ${{maxN}} ノード)。フィルタを使って絞り込んでください。`;
+      }} else {{
+        el && el.remove();
+      }}
     }}
 
     const chartEl  = document.getElementById('chart');
     const filterEl  = document.getElementById('filter');
     const clearBtn  = document.getElementById('clear-btn');
-    const h0 = calcHeight(currentData);
+    const {{ height: h0, maxN: maxN0 }} = calcHeight(currentData);
+    setOverflowNotice(maxN0);
     chartEl.style.height = h0 + 'px';
     // Pass height explicitly so ECharts does not rely on CSS reflow timing.
     const chart = echarts.init(chartEl, null, {{ height: h0 }});
@@ -134,7 +159,8 @@ pub fn render(sankey_json: &str) -> String {
     }}
 
     function renderChart(data) {{
-      const h = calcHeight(data);
+      const {{ height: h, maxN }} = calcHeight(data);
+      setOverflowNotice(maxN);
       chartEl.style.height = h + 'px';
       chart.resize({{ height: h }});
       chart.setOption({{

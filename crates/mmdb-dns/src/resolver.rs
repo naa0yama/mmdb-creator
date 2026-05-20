@@ -67,8 +67,8 @@ mod tests {
     fn build_custom_resolver_valid_ip_succeeds() {
         let result = build_resolver(
             &DohServer::Custom {
-                ip: String::from("9.9.9.9"),
-                server_name: String::from("dns.quad9.net"),
+                ip: String::from("198.51.100.1"),
+                server_name: String::from("dns.example.net"),
             },
             5,
         );

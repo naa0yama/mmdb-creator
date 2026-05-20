@@ -330,13 +330,13 @@ mod tests {
 
     #[test]
     fn backbone_containment_is_not_an_error() {
-        // /24 and /20 overlap but are not exact duplicates
+        // /25 and /26 overlap but are not exact duplicates
         let sheets = vec![make_sheet(
             "A.xlsx",
             SheetType::Backbone,
             vec![
-                make_row(0, &["198.51.96.0/20"]),
-                make_row(1, &["198.51.100.0/24"]),
+                make_row(0, &["198.51.100.0/25"]),
+                make_row(1, &["198.51.100.0/26"]),
             ],
         )];
         assert!(validate_no_duplicate_cidrs(&sheets, &no_groups()).is_ok());
@@ -465,17 +465,17 @@ mod tests {
 
     #[test]
     fn backbone_cidr_plus_bgp_supernet_is_ok() {
-        // /19 and /20 coexist as backbone — containment, not exact dup
+        // /25 and /26 coexist as backbone — containment, not exact dup
         let sheets = vec![
             make_sheet(
                 "A1.xlsx",
                 SheetType::Backbone,
-                vec![make_row(0, &["198.51.96.0/19"])],
+                vec![make_row(0, &["198.51.100.0/25"])],
             ),
             make_sheet(
                 "A2.xlsx",
                 SheetType::Backbone,
-                vec![make_row(0, &["198.51.96.0/20"])],
+                vec![make_row(0, &["198.51.100.0/26"])],
             ),
         ];
         assert!(validate_no_duplicate_cidrs(&sheets, &no_groups()).is_ok());
@@ -485,17 +485,17 @@ mod tests {
 
     #[test]
     fn same_group_allows_duplicates() {
-        let lookup = group_lookup(&[("IPAM", &["border1", "border2"])]);
+        let lookup = group_lookup(&[("IPAM", &["edge01", "edge02"])]);
         let sheets = vec![
             make_sheet_named(
                 "IPAM",
-                "border1",
+                "edge01",
                 SheetType::Backbone,
                 vec![make_row(0, &["198.51.100.0/24"])],
             ),
             make_sheet_named(
                 "IPAM",
-                "border2",
+                "edge02",
                 SheetType::Backbone,
                 vec![make_row(0, &["198.51.100.0/24"])],
             ),
@@ -505,23 +505,23 @@ mod tests {
 
     #[test]
     fn same_group_three_sheets_allows_duplicates() {
-        let lookup = group_lookup(&[("IPAM", &["border1", "border2", "border3"])]);
+        let lookup = group_lookup(&[("IPAM", &["edge01", "edge02", "edge03"])]);
         let sheets = vec![
             make_sheet_named(
                 "IPAM",
-                "border1",
+                "edge01",
                 SheetType::Backbone,
                 vec![make_row(0, &["198.51.100.0/24"])],
             ),
             make_sheet_named(
                 "IPAM",
-                "border2",
+                "edge02",
                 SheetType::Backbone,
                 vec![make_row(0, &["198.51.100.0/24"])],
             ),
             make_sheet_named(
                 "IPAM",
-                "border3",
+                "edge03",
                 SheetType::Backbone,
                 vec![make_row(0, &["198.51.100.0/24"])],
             ),
@@ -532,19 +532,19 @@ mod tests {
     #[test]
     fn different_groups_same_cidr_is_error() {
         let lookup = group_lookup(&[
-            ("IPAM", &["border1", "border2"]),
-            ("IPAM", &["core1", "core2"]),
+            ("IPAM", &["edge01", "edge02"]),
+            ("IPAM", &["core01", "core02"]),
         ]);
         let sheets = vec![
             make_sheet_named(
                 "IPAM",
-                "border1",
+                "edge01",
                 SheetType::Backbone,
                 vec![make_row(0, &["198.51.100.0/24"])],
             ),
             make_sheet_named(
                 "IPAM",
-                "core1",
+                "core01",
                 SheetType::Backbone,
                 vec![make_row(0, &["198.51.100.0/24"])],
             ),
@@ -558,13 +558,13 @@ mod tests {
         let sheets = vec![
             make_sheet_named(
                 "IPAM",
-                "border1",
+                "edge01",
                 SheetType::Backbone,
                 vec![make_row(0, &["198.51.100.0/24"])],
             ),
             make_sheet_named(
                 "IPAM",
-                "border2",
+                "edge02",
                 SheetType::Backbone,
                 vec![make_row(0, &["198.51.100.0/24"])],
             ),
@@ -575,11 +575,11 @@ mod tests {
 
     #[test]
     fn grouped_vs_ungrouped_duplicate_is_error() {
-        let lookup = group_lookup(&[("IPAM", &["border1", "border2"])]);
+        let lookup = group_lookup(&[("IPAM", &["edge01", "edge02"])]);
         let sheets = vec![
             make_sheet_named(
                 "IPAM",
-                "border1",
+                "edge01",
                 SheetType::Backbone,
                 vec![make_row(0, &["198.51.100.0/24"])],
             ),
@@ -606,11 +606,11 @@ mod tests {
             header_row: 1,
             columns: vec![],
             sheettype: ST::Backbone,
-            groups: vec![vec!["border1".to_owned(), "typo_sheet".to_owned()]],
+            groups: vec![vec!["edge01".to_owned(), "typo_sheet".to_owned()]],
         }];
         let results = vec![make_sheet_named(
             "IPAM.xlsx",
-            "border1",
+            "edge01",
             SheetType::Backbone,
             vec![],
         )];
@@ -632,7 +632,7 @@ mod tests {
         }];
         let results = vec![make_sheet_named(
             "IPAM.xlsx",
-            "border1",
+            "edge01",
             SheetType::Backbone,
             vec![],
         )];

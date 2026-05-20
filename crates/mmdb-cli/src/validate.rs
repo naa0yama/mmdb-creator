@@ -1350,10 +1350,11 @@ mod tests {
             let patterns = make_patterns_with_excludes(
                 "example.com",
                 r"^(?P<interface>[^.]+)\.example\.com$",
-                &[r"\.ad\.example\.com$"],
+                &[r"\.internal\.example\.com$"],
             );
             let norm = HashMap::new();
-            let result = filter_unmatched_ptrs(&ptrs(&["host.ad.example.com"]), &patterns, &norm);
+            let result =
+                filter_unmatched_ptrs(&ptrs(&["host.internal.example.com"]), &patterns, &norm);
             assert!(result.is_empty());
         }
 
@@ -1361,7 +1362,7 @@ mod tests {
         fn domain_not_matching_is_ignored() {
             let patterns = make_patterns("example.com", r"^(?P<interface>[^.]+)\.example\.com$");
             let norm = HashMap::new();
-            let result = filter_unmatched_ptrs(&ptrs(&["host.other.net"]), &patterns, &norm);
+            let result = filter_unmatched_ptrs(&ptrs(&["host.other.invalid"]), &patterns, &norm);
             assert!(result.is_empty());
         }
 
@@ -1413,8 +1414,8 @@ mod tests {
             .unwrap();
             let norm = HashMap::new();
             // Fails regex → reported
-            let result = filter_unmatched_ptrs(&ptrs(&["other.net"]), &patterns, &norm);
-            assert_eq!(result, vec!["other.net"]);
+            let result = filter_unmatched_ptrs(&ptrs(&["other.invalid"]), &patterns, &norm);
+            assert_eq!(result, vec!["other.invalid"]);
         }
     }
 
@@ -1454,8 +1455,8 @@ mod tests {
         fn valid_groups_no_error() {
             let cfg = Config {
                 sheets: Some(vec![sheet_with_groups(vec![vec![
-                    "border1.ty1".to_owned(),
-                    "border1.ty2".to_owned(),
+                    "edge01.pop1".to_owned(),
+                    "edge01.pop2".to_owned(),
                 ]])]),
                 ..base_config()
             };
@@ -1467,7 +1468,7 @@ mod tests {
         fn group_single_sheet_is_error() {
             let cfg = Config {
                 sheets: Some(vec![sheet_with_groups(vec![vec![
-                    "border1.ty1".to_owned(),
+                    "edge01.pop1".to_owned(),
                 ]])]),
                 ..base_config()
             };
@@ -1481,10 +1482,10 @@ mod tests {
         #[test]
         fn group_sheet_in_excludes_is_error() {
             let mut s = sheet_with_groups(vec![vec![
-                "border1.ty1".to_owned(),
-                "border1.ty2".to_owned(),
+                "edge01.pop1".to_owned(),
+                "edge01.pop2".to_owned(),
             ]]);
-            s.excludes_sheets = vec!["border1.ty1".to_owned()];
+            s.excludes_sheets = vec!["edge01.pop1".to_owned()];
             let cfg = Config {
                 sheets: Some(vec![s]),
                 ..base_config()
@@ -1500,8 +1501,8 @@ mod tests {
         fn group_multi_membership_is_error() {
             let cfg = Config {
                 sheets: Some(vec![sheet_with_groups(vec![
-                    vec!["border1.ty1".to_owned(), "border1.ty2".to_owned()],
-                    vec!["border1.ty2".to_owned(), "core1".to_owned()],
+                    vec!["edge01.pop1".to_owned(), "edge01.pop2".to_owned()],
+                    vec!["edge01.pop2".to_owned(), "core01".to_owned()],
                 ])]),
                 ..base_config()
             };

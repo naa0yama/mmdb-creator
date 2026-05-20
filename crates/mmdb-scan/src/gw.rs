@@ -299,7 +299,7 @@ mod tests {
 
     fn compiled_patterns() -> Vec<CompiledPattern> {
         let p = PtrPattern {
-            domain: Some(String::from("example.ad.jp")),
+            domain: Some(String::from("example.com")),
             regex: String::from(
                 r"(?x)
                   ^(?:(?P<facing>user(?:\.virtual)?|virtual)\.)?
@@ -308,7 +308,7 @@ mod tests {
                   (?:\.[a-z]+\d+)?\.
                   (?P<device>(?P<device_role>[a-z]+)\d+)\.
                   (?P<facility>[a-z0-9]+)\.
-                  example\.ad\.jp$",
+                  example\.com$",
             ),
             excludes: vec![],
         };
@@ -382,8 +382,8 @@ mod tests {
         r
     }
 
-    const GW_PTR: &str = "user.ge-0-0-0.rtr0101.dc01.example.ad.jp";
-    const GW_PTR2: &str = "user.ge-0-0-1.rtr0102.dc01.example.ad.jp";
+    const GW_PTR: &str = "user.ge-0-0-0.rtr01.dc01.example.com";
+    const GW_PTR2: &str = "user.ge-0-0-1.rtr02.dc01.example.com";
 
     // --- lpm_lookup ---
 
@@ -519,7 +519,7 @@ mod tests {
     #[test]
     fn ptr_candidate_index_no_match() {
         let patterns = compiled_patterns();
-        let h = hop(1, "198.51.100.10", Some("host.docs.example.com"));
+        let h = hop(1, "198.51.100.10", Some("host.example.com"));
         let hops: Vec<&Hop> = vec![&h];
         assert!(ptr_candidate_index(&hops, &patterns).is_none());
     }
@@ -540,7 +540,7 @@ mod tests {
         let patterns = compiled_patterns();
         let records = [record(
             "198.51.100.0/29",
-            vec![hop(1, "198.51.100.10", Some("host.docs.example.com"))],
+            vec![hop(1, "198.51.100.10", Some("host.example.com"))],
         )];
         let results = resolve(&records, &patterns, &HashMap::new());
         assert_eq!(results[0].gateway.status, "no_ptr_match");
@@ -568,7 +568,7 @@ mod tests {
             vec![
                 hop(1, "198.51.100.1", None),
                 hop(2, "198.51.100.10", Some(GW_PTR)),
-                hop(3, "198.51.100.11", Some("host.customer.example.com")),
+                hop(3, "198.51.100.11", Some("host2.example.com")),
             ],
         )];
         let results = resolve(&records, &patterns, &HashMap::new());
@@ -708,7 +708,7 @@ mod tests {
         let patterns = compiled_patterns();
         let records = [record(
             "198.51.100.0/29",
-            vec![hop(1, "198.51.100.10", Some("host.customer.example.com"))],
+            vec![hop(1, "198.51.100.10", Some("host2.example.com"))],
         )];
         let results = resolve(&records, &patterns, &HashMap::new());
         assert!(results[0].routes[0].device.is_none());
@@ -728,7 +728,7 @@ mod tests {
     #[test]
     fn resolve_each_hop_device_independent() {
         let patterns = compiled_patterns();
-        // hop1 → GW_PTR (rtr0101), hop2 → GW_PTR2 (rtr0102); last match is gateway
+        // hop1 → GW_PTR (rtr01), hop2 → GW_PTR2 (rtr02); last match is gateway
         let records = [record(
             "198.51.100.0/29",
             vec![
@@ -743,14 +743,14 @@ mod tests {
                 .device
                 .as_ref()
                 .and_then(|d| d.device.as_deref()),
-            Some("rtr0101")
+            Some("rtr01")
         );
         assert_eq!(
             results[0].routes[1]
                 .device
                 .as_ref()
                 .and_then(|d| d.device.as_deref()),
-            Some("rtr0102")
+            Some("rtr02")
         );
     }
 }
