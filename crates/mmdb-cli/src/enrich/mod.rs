@@ -495,7 +495,7 @@ mod tests {
         // First record has mmdb.backbone, second has mmdb.hosting.
         let records = vec![
             json!({"ip": "198.51.100.1", "mmdb": {"backbone": {"router": "r1"}}}),
-            json!({"ip": "198.51.100.2", "mmdb": {"hosting": {"dc": "dc1"}}}),
+            json!({"ip": "198.51.100.2", "mmdb": {"hosting": {"dc": "dc01"}}}),
         ];
         let infos = union_field_infos(&records);
         let paths: Vec<&str> = infos.iter().map(|f| f.path.as_str()).collect();

@@ -286,7 +286,8 @@ mod tests {
 
     #[test]
     fn flatten_fields_nested_object() {
-        let v = json!({"mmdb": {"autonomous_system_number": 64496, "operational": {"host": "border1"}}});
+        let v =
+            json!({"mmdb": {"autonomous_system_number": 64496, "operational": {"host": "edge01"}}});
         let fields = flatten_fields("", &v);
         // Object nodes appear
         assert!(
@@ -450,7 +451,7 @@ mod tests {
 
     #[test]
     fn project_fields_object_subtree_flat() {
-        let record = json!({"ip": "198.51.100.1", "mmdb": {"asn": 64496, "operational": {"host": "border1"}}});
+        let record = json!({"ip": "198.51.100.1", "mmdb": {"asn": 64496, "operational": {"host": "edge01"}}});
         let fields = vec![
             ef("ip"),
             EnrichField {
@@ -461,7 +462,7 @@ mod tests {
         ];
         let out = project_fields(&record, &fields, ",");
         assert_eq!(out["ip"], json!("198.51.100.1"));
-        assert_eq!(out["mmdb.operational.host"], json!("border1"));
+        assert_eq!(out["mmdb.operational.host"], json!("edge01"));
         assert!(out.get("mmdb.asn").is_none());
     }
 
@@ -473,7 +474,7 @@ mod tests {
             "ip": "198.51.100.1",
             "mmdb": {
                 "asn": 64496,
-                "operational": {"host": "border1", "role": "core"}
+                "operational": {"host": "edge01", "role": "core"}
             }
         });
         // Parent subtree selected; one child also listed with output_name.
@@ -492,7 +493,7 @@ mod tests {
         // Original dot-notation key must NOT appear (no duplicate).
         assert!(out.get("mmdb.asn").is_none());
         // Other subtree leaves must still appear.
-        assert_eq!(out["mmdb.operational.host"], json!("border1"));
+        assert_eq!(out["mmdb.operational.host"], json!("edge01"));
         assert_eq!(out["mmdb.operational.role"], json!("core"));
     }
 }

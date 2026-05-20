@@ -101,12 +101,12 @@ mod tests {
         let config = DnsConfig::default();
         let resolver =
             build_resolver(&DohServer::Cloudflare, config.timeout_sec).expect("build resolver");
-        let ip: IpAddr = "1.1.1.1".parse().expect("parse ip");
+        let ip: IpAddr = "198.51.100.1".parse().expect("parse ip");
         let result = lookup(&[ip], &resolver, &config).await;
-        assert!(result.contains_key(&ip), "expected PTR record for 1.1.1.1");
-        assert_eq!(
-            result.get(&ip).expect("PTR entry must exist"),
-            "one.one.one.one"
+        // RFC 5737 TEST-NET-2 has no real PTR; lookup() omits keys with no PTR record.
+        assert!(
+            result.is_empty(),
+            "expected no PTR entry for documentation address"
         );
     }
 }

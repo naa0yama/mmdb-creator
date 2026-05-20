@@ -361,7 +361,7 @@ last-modified:  2025-01-15T00:00:00Z
 
     #[test]
     fn parse_referral_extracts_server() {
-        let input = "% Information related to '2001:370::/32'\n\nrefer: whois.iana.org\n";
+        let input = "% Information related to '2001:db8::/32'\n\nrefer: whois.iana.org\n";
         assert_eq!(parse_referral(input), Some("whois.iana.org".to_owned()));
     }
 
@@ -510,10 +510,10 @@ netname: VALID\n";
 \n\
 inetnum:      198.51.100.0 - 198.51.100.255\n\
 organisation: EXAMPLE-RIR\n\
-refer:        whois.example-rir.net\n";
+refer:        whois.example.net\n";
         let result = parse_iana_response(input).unwrap();
         assert_eq!(result.0.to_string(), "198.51.100.0/24");
-        assert_eq!(result.1, "whois.example-rir.net");
+        assert_eq!(result.1, "whois.example.net");
     }
 
     #[test]
@@ -523,10 +523,10 @@ refer:        whois.example-rir.net\n";
 \n\
 inet6num:     2001:db8::/32\n\
 organisation: EXAMPLE-RIR\n\
-refer:        whois.example-rir.net\n";
+refer:        whois.example.net\n";
         let result = parse_iana_response(input).unwrap();
         assert_eq!(result.0.to_string(), "2001:db8::/32");
-        assert_eq!(result.1, "whois.example-rir.net");
+        assert_eq!(result.1, "whois.example.net");
     }
 
     #[test]
@@ -537,7 +537,7 @@ refer:        whois.example-rir.net\n";
 
     #[test]
     fn parse_iana_response_missing_inetnum_returns_none() {
-        let input = "refer: whois.example-rir.net\n";
+        let input = "refer: whois.example.net\n";
         assert!(parse_iana_response(input).is_none());
     }
 
@@ -547,9 +547,9 @@ refer:        whois.example-rir.net\n";
 % comment line\n\
 # another comment\n\
 inetnum: 198.51.100.0 - 198.51.100.255\n\
-refer:   whois.example-rir.net\n";
+refer:   whois.example.net\n";
         let result = parse_iana_response(input).unwrap();
-        assert_eq!(result.1, "whois.example-rir.net");
+        assert_eq!(result.1, "whois.example.net");
     }
 
     // ── parse_rpsl continuation lines ─────────────────────────────────────────

@@ -477,18 +477,18 @@ mod tests {
     fn backbone_cidr_bidirectional_match() {
         let rows = vec![json!({
             "_source": {"file": "A.xlsx", "sheet": "s1", "row_index": 0, "sheettype": "backbone"},
-            "network": ["198.51.96.0/20"],
+            "network": ["198.51.100.0/26"],
             "serviceid": "SVC-BGP"
         })];
         let f = write_rows(&rows);
 
         let m = XlsxMatcher::build(f.path(), &base_config()).unwrap();
-        let mut rec = gw_record("198.51.96.0/19", None);
+        let mut rec = gw_record("198.51.100.0/25", None);
         m.attach(&mut rec);
         let xlsx = rec.xlsx.as_ref().unwrap();
         assert!(
             xlsx.contains_key("backbone"),
-            "scan /19 must match backbone /20"
+            "scan /25 must match backbone /26"
         );
     }
 
@@ -626,18 +626,18 @@ mod tests {
     fn ptr_match_backbone_only() {
         let rows = vec![json!({
             "_source": {"file": "A.xlsx", "sheet": "s1", "row_index": 0, "sheettype": "backbone"},
-            "host": "rtr0101",
+            "host": "rtr01",
             "network": ["198.51.100.0/29"]
         })];
         let f = write_rows(&rows);
 
         let cfg = config_with_ptr_field("device", "host");
         let m = XlsxMatcher::build(f.path(), &cfg).unwrap();
-        let mut rec = gw_record("198.51.100.0/29", Some(make_device("rtr0101", "dc01")));
+        let mut rec = gw_record("198.51.100.0/29", Some(make_device("rtr01", "dc01")));
         m.attach(&mut rec);
         let xlsx = rec.xlsx.as_ref().unwrap();
         assert!(xlsx.contains_key("backbone"));
-        assert_eq!(xlsx["backbone"]["host"], "rtr0101");
+        assert_eq!(xlsx["backbone"]["host"], "rtr01");
     }
 
     #[test]
@@ -707,12 +707,12 @@ mod tests {
             json!({
                 "_source": {"file": "B1.xlsx", "sheet": "s1", "row_index": 0, "sheettype": "hosting"},
                 "network": ["198.51.100.1/32"],
-                "hostname": "first.example.com"
+                "hostname": "customer1.example.com"
             }),
             json!({
                 "_source": {"file": "B2.xlsx", "sheet": "s1", "row_index": 0, "sheettype": "hosting"},
                 "network": ["198.51.100.1/32"],
-                "hostname": "second.example.com"
+                "hostname": "customer2.example.com"
             }),
         ];
         let f = write_rows(&rows);
@@ -722,7 +722,7 @@ mod tests {
         m.attach(&mut rec);
         let xlsx = rec.xlsx.as_ref().unwrap();
         assert!(xlsx.contains_key("hosting"));
-        assert_eq!(xlsx["hosting"]["hostname"], "first.example.com");
+        assert_eq!(xlsx["hosting"]["hostname"], "customer1.example.com");
     }
 
     // --- backbone exact match ---
@@ -750,7 +750,7 @@ mod tests {
     fn hosting_row_does_not_create_ptr_candidate() {
         let rows = vec![json!({
             "_source": {"file": "B.xlsx", "sheet": "s1", "row_index": 0, "sheettype": "hosting"},
-            "host": "rtr0101",
+            "host": "rtr01",
             "network": ["198.51.100.1/32"]
         })];
         let f = write_rows(&rows);
@@ -759,7 +759,7 @@ mod tests {
         let m = XlsxMatcher::build(f.path(), &cfg).unwrap();
         // The hosting row has matching "host" field, but hosting has no PTR matching.
         // Only CIDR exact match applies.
-        let mut rec = gw_record("198.51.100.0/29", Some(make_device("rtr0101", "dc01")));
+        let mut rec = gw_record("198.51.100.0/29", Some(make_device("rtr01", "dc01")));
         m.attach(&mut rec);
         // No backbone, no hosting (hosting /32 != /29)
         assert!(rec.xlsx.is_none(), "hosting must not match via PTR");
@@ -811,15 +811,15 @@ mod tests {
     fn ptr_no_match_falls_back_to_backbone_cidr() {
         let rows = vec![json!({
             "_source": {"file": "A.xlsx", "sheet": "s1", "row_index": 0, "sheettype": "backbone"},
-            "host": "rtr9999",
+            "host": "srv01",
             "network": ["198.51.100.0/24"]
         })];
         let f = write_rows(&rows);
 
         let cfg = config_with_ptr_field("device", "host");
         let m = XlsxMatcher::build(f.path(), &cfg).unwrap();
-        // PTR device doesn't match "rtr9999", but CIDR /24 contains /29 → backbone match via CIDR
-        let mut rec = gw_record("198.51.100.0/29", Some(make_device("rtr0101", "dc01")));
+        // PTR device "srv01" has no backbone-prefix match, but CIDR /24 contains /29 → backbone match via CIDR
+        let mut rec = gw_record("198.51.100.0/29", Some(make_device("rtr01", "dc01")));
         m.attach(&mut rec);
         let xlsx = rec.xlsx.as_ref().unwrap();
         assert!(

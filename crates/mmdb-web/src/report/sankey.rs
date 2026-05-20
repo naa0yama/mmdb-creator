@@ -124,7 +124,7 @@ fn hop_nodes(hop: &Hop, granularity: SankeyGranularity) -> Vec<String> {
             match (device_str, iface_str) {
                 // Qualify the interface node with the device name so that
                 // identically-named interfaces on different devices (e.g.
-                // xe-0-0-0 on medge0306 vs edge0504) remain distinct nodes.
+                // xe-0-0-0 on edge01 vs edge02) remain distinct nodes.
                 (Some(dev), Some(iface)) => vec![dev.to_owned(), format!("{dev}/{iface}")],
                 (Some(dev), None) => vec![dev.to_owned()],
                 _ => vec![fallback()],
@@ -398,12 +398,12 @@ pub(crate) mod tests {
             interface: None,
             device: None,
             device_role: None,
-            facility: Some("colo05".to_owned()),
+            facility: Some("dc05".to_owned()),
             facing: None,
             customer_asn: None,
         };
         let hop = make_hop(Some("198.51.100.1"), None, Some(dev));
-        assert_eq!(hop_nodes(&hop, SankeyGranularity::Facility), vec!["colo05"]);
+        assert_eq!(hop_nodes(&hop, SankeyGranularity::Facility), vec!["dc05"]);
 
         let hop_no_dev = make_hop(Some("198.51.100.1"), None, None);
         assert_eq!(
@@ -436,14 +436,14 @@ pub(crate) mod tests {
     fn hop_nodes_device() {
         let dev = GatewayDevice {
             interface: None,
-            device: Some("rtr0101".to_owned()),
+            device: Some("rtr01".to_owned()),
             device_role: None,
             facility: None,
             facing: None,
             customer_asn: None,
         };
         let hop = make_hop(Some("198.51.100.1"), None, Some(dev));
-        assert_eq!(hop_nodes(&hop, SankeyGranularity::Device), vec!["rtr0101"]);
+        assert_eq!(hop_nodes(&hop, SankeyGranularity::Device), vec!["rtr01"]);
 
         let hop_no_dev = make_hop(Some("198.51.100.1"), None, None);
         assert_eq!(
@@ -519,12 +519,12 @@ pub(crate) mod tests {
     #[test]
     fn build_facility_merges_hops() {
         // Two records with different hop IPs but the same facility should produce
-        // a single "colo05" node, not two separate nodes.
+        // a single "dc05" node, not two separate nodes.
         let dev_a = GatewayDevice {
             interface: None,
             device: None,
             device_role: None,
-            facility: Some("colo05".to_owned()),
+            facility: Some("dc05".to_owned()),
             facing: None,
             customer_asn: None,
         };
@@ -532,7 +532,7 @@ pub(crate) mod tests {
             interface: None,
             device: None,
             device_role: None,
-            facility: Some("colo05".to_owned()),
+            facility: Some("dc05".to_owned()),
             facing: None,
             customer_asn: None,
         };
@@ -542,8 +542,8 @@ pub(crate) mod tests {
         r2.routes = vec![make_hop(Some("198.51.100.2"), None, Some(dev_b))];
 
         let data = build(&[r1, r2], SankeyGranularity::Facility);
-        let colo_count = data.nodes.iter().filter(|n| n.name == "colo05").count();
-        assert_eq!(colo_count, 1, "facility 'colo05' must appear exactly once");
+        let dc05_count = data.nodes.iter().filter(|n| n.name == "dc05").count();
+        assert_eq!(dc05_count, 1, "facility 'dc05' must appear exactly once");
     }
 
     #[test]
