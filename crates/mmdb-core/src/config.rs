@@ -333,7 +333,7 @@ const fn default_http_retry_delay_secs() -> u64 {
 /// Entries are evaluated in definition order; the first match wins.
 #[derive(Debug, Clone, Deserialize)]
 pub struct PtrPattern {
-    /// PTR domain suffix filter (e.g. `"example.ad.jp"`).
+    /// PTR domain suffix filter (e.g. `"example.com"`).
     /// When absent, the pattern is tried for every PTR record.
     pub domain: Option<String>,
     /// Regex applied to the full PTR string when the domain filter passes.

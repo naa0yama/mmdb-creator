@@ -52,9 +52,9 @@ resolve_server(ip)
 ### IANA レスポンス例
 
 ```
-inetnum:      193.0.0.0 - 193.255.255.255
-organisation: RIPE NCC
-refer:        whois.ripe.net
+inetnum:      198.51.100.0 - 198.51.100.255
+organisation: EXAMPLE-NET Example Network, Inc.
+refer:        whois.example.net
 ```
 
 `inetnum` を `IpNet` に変換してキャッシュキー、`refer:` の値を RIR サーバーとして保存する。
@@ -65,13 +65,13 @@ refer:        whois.ripe.net
 
 例:
 
-- `data/cache/import/whois-iana-ipv4-193.0.0.0_8.json`
+- `data/cache/import/whois-iana-ipv4-198.51.100.0_24.json`
 - `data/cache/import/whois-iana-ipv6-2001-db8--_32.json`
 
 内容:
 
 ```json
-{ "block": "193.0.0.0/8", "server": "whois.ripe.net" }
+{ "block": "198.51.100.0/24", "server": "whois.example.net" }
 ```
 
 TTL は `cache_ttl_secs` を使用。IANA のブロック割り当ては変化が極めて少ないため
