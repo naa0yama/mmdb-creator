@@ -87,6 +87,7 @@ if [ -d .githooks ]; then chmod +x .githooks/*; fi
 
 ["ast-grep"]
 description = "Run ast-grep custom rules check"
+depends = ["ast-grep:text"]
 run = """
 #!/usr/bin/env bash
 set -euo pipefail
@@ -99,8 +100,13 @@ sg scan --error --color never \
   --filter 'no-real-(ipv4|ipv6|asn|fqdn)' \
   --off=unused-suppression \
   --globs '!**/cymru.rs' --globs '!**/integration_test.rs'
+"""
 
-# text-file testdata-policy rules (md, json, jsonl)
+["ast-grep:text"]
+description = "grep-P testdata-policy check for md/json/jsonl (RFC-reserved values only)"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
 # ast-grep generic language is not supported in 0.42.x; use grep -P (ugrep PCRE2) instead.
 # Output format: [rule-id] description\\n  file:line:content  (one per violation)
 _text_check() {
