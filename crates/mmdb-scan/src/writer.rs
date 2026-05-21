@@ -172,7 +172,7 @@ mod tests {
         let tmp = NamedTempFile::new().unwrap();
         let path = tmp.path().to_path_buf();
 
-        let handle = spawn_writer(path.clone(), 100, Duration::from_secs(60))
+        let handle = spawn_writer(path.clone(), 100, Duration::from_mins(1))
             .await
             .unwrap();
 
@@ -194,7 +194,7 @@ mod tests {
         let path = tmp.path().to_path_buf();
 
         // flush_count = 2 so the second record triggers a flush.
-        let handle = spawn_writer(path.clone(), 2, Duration::from_secs(60))
+        let handle = spawn_writer(path.clone(), 2, Duration::from_mins(1))
             .await
             .unwrap();
 

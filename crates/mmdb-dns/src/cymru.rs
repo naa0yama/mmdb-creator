@@ -204,7 +204,7 @@ fn group_into_buckets(sorted_ips: &[IpAddr]) -> Vec<(IpNet, Vec<IpAddr>)> {
     }
 
     let mut result: Vec<(IpNet, Vec<IpAddr>)> = map.into_iter().collect();
-    result.sort_by(|a, b| a.0.cmp(&b.0));
+    result.sort_by_key(|a| a.0);
     result
 }
 
