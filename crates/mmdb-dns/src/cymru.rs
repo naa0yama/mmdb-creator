@@ -333,6 +333,7 @@ mod tests {
     #[test]
     fn cymru_origin_name_ipv4() {
         let ip: IpAddr = "198.51.100.57".parse().unwrap();
+        // ast-grep-ignore: no-real-ipv4
         assert_eq!(cymru_origin_name(ip), "57.100.51.198.origin.asn.cymru.com");
     }
 

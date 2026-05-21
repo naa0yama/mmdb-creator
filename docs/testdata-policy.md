@@ -170,7 +170,7 @@ edge01.dc05   core01.dc01
 - Non-`example.*` / non-`iana.org` / non-`.invalid` domains in test fixtures
 - `example-rir.net` — not RFC-reserved; use `example.net` or `example.com` instead
 - `example.ad.jp`, `example.ne.jp`, `example.co.jp` — not RFC-reserved; use `example.com` or `example.net`
-- Supernets of TEST-NET-2 (e.g., `198.51.96.0/20`) — use RFC 1918 supernets
+- Supernets of TEST-NET-2 (any prefix broader than `/24` that contains `198.51.100.0/24`) — those prefixes include live routable space; use RFC 1918 supernets instead
 
 ---
 
@@ -199,8 +199,9 @@ Four rules applied to `.rs` files via ast-grep.
 | `no-real-asn.yml`  | ASNs outside RFC 5398 range AS64496-AS64511      |
 | `no-real-fqdn.yml` | PTR hostnames with non-approved device or domain |
 
-Files excluded from testdata scanning: `cymru.rs` (reversed-octet DNS queries),
-`integration_test.rs` (live-network fixture data).
+Files that contain intentional real-value strings (e.g., `cymru.rs` for
+reversed-octet DNS queries) use inline `// ast-grep-ignore` comments to
+suppress individual violations rather than blanket file exclusions.
 
 ### grep rules — text files (`mise run ast-grep`)
 
