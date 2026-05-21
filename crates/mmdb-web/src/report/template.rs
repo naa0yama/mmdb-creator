@@ -43,6 +43,11 @@ pub fn render(sankey_json: &str) -> String {
       <input id="filter" type="text" placeholder="Filter by IP or CIDR… (node click to select)"
              class="input input-bordered input-sm">
       <button id="clear-btn" class="btn btn-sm btn-ghost" style="display:none">✕</button>
+      <label class="label cursor-pointer gap-1 ml-2">
+        <input type="checkbox" id="show-hosts" class="checkbox checkbox-sm">
+        <span class="label-text text-xs">Show host routes</span>
+      </label>
+      <span id="node-count" class="text-xs opacity-60"></span>
     </div>
     <div id="chart-wrap">
       <div id="chart"></div>
@@ -122,9 +127,23 @@ pub fn render(sankey_json: &str) -> String {
       }}
     }}
 
-    const chartEl  = document.getElementById('chart');
-    const filterEl  = document.getElementById('filter');
-    const clearBtn  = document.getElementById('clear-btn');
+    const chartEl     = document.getElementById('chart');
+    const filterEl    = document.getElementById('filter');
+    const clearBtn    = document.getElementById('clear-btn');
+    const showHostsEl = document.getElementById('show-hosts');
+    const nodeCountEl = document.getElementById('node-count');
+
+    function isHostRoute(name) {{
+      return name.endsWith('/32') || name.endsWith('/128');
+    }}
+
+    function filterHostRoutes(data) {{
+      if (showHostsEl.checked) return data;
+      const nodes = data.nodes.filter(n => !isHostRoute(n.name));
+      const kept  = new Set(nodes.map(n => n.name));
+      const links = data.links.filter(l => kept.has(l.source) && kept.has(l.target));
+      return {{ nodes, links }};
+    }}
     const {{ height: h0, maxN: maxN0 }} = calcHeight(currentData);
     setOverflowNotice(maxN0);
     chartEl.style.height = h0 + 'px';
@@ -142,23 +161,8 @@ pub fn render(sankey_json: &str) -> String {
       }}
     }}
 
-    function applyFilter(q) {{
-      filterEl.value = q;
-      clearBtn.style.display = q ? '' : 'none';
-      if (!q) {{ renderChart(currentData); return; }}
-      const ql = q.toLowerCase();
-      const matched = new Set(
-        currentData.nodes.filter((_, i) => NODE_NAMES_LC[i].includes(ql)).map(n => n.name)
-      );
-      if (matched.size === 0) {{ renderChart({{ nodes: [], links: [] }}); return; }}
-      const nodeSet = new Set(matched);
-      bfsExpand(matched, PREDS, nodeSet);
-      bfsExpand(matched, SUCCS, nodeSet);
-      const links = currentData.links.filter(l => nodeSet.has(l.source) && nodeSet.has(l.target));
-      renderChart({{ nodes: [...nodeSet].map(n => ({{ name: n }})), links }});
-    }}
-
-    function renderChart(data) {{
+    function _setChartData(data) {{
+      nodeCountEl.textContent = `${{data.nodes.length}} / ${{currentData.nodes.length}}`;
       const {{ height: h, maxN }} = calcHeight(data);
       setOverflowNotice(maxN);
       chartEl.style.height = h + 'px';
@@ -181,6 +185,26 @@ pub fn render(sankey_json: &str) -> String {
         }}]
       }});
     }}
+
+    function applyFilter(q) {{
+      filterEl.value = q;
+      clearBtn.style.display = q ? '' : 'none';
+      if (!q) {{ renderChart(currentData); return; }}
+      const ql = q.toLowerCase();
+      const matched = new Set(
+        currentData.nodes.filter((_, i) => NODE_NAMES_LC[i].includes(ql)).map(n => n.name)
+      );
+      if (matched.size === 0) {{ _setChartData({{ nodes: [], links: [] }}); return; }}
+      const nodeSet = new Set(matched);
+      bfsExpand(matched, PREDS, nodeSet);
+      bfsExpand(matched, SUCCS, nodeSet);
+      const links = currentData.links.filter(l => nodeSet.has(l.source) && nodeSet.has(l.target));
+      _setChartData({{ nodes: [...nodeSet].map(n => ({{ name: n }})), links }});
+    }}
+
+    function renderChart(data) {{
+      _setChartData(filterHostRoutes(data));
+    }}
     renderChart(currentData);
 
     // Set granularity select to match the active dataset key.
@@ -196,6 +220,7 @@ pub fn render(sankey_json: &str) -> String {
 
     filterEl.addEventListener('input', function() {{ applyFilter(this.value.trim()); }});
     clearBtn.addEventListener('click', function() {{ applyFilter(''); }});
+    showHostsEl.addEventListener('change', function() {{ applyFilter(filterEl.value.trim()); }});
     window.addEventListener('resize', () => chart.resize());
 
     function switchGranularity(key) {{

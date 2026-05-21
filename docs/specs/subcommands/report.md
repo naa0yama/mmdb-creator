@@ -35,6 +35,10 @@ The generated HTML page:
     toward destination CIDRs are included automatically.
   - Clicking a node in the chart sets the filter to that node's name.
   - Clicking the `Internet` node or the clear button (`✕`) resets the filter.
+- Provides a "Show host routes" checkbox (unchecked by default) that hides
+  `/32` (IPv4) and `/128` (IPv6) destination nodes from the diagram.
+- Displays a node count badge (`visible / total`) that updates whenever the
+  filter or host-route toggle changes the rendered node set.
 - Uses a two-column flex layout: fixed sidebar (Network / Topology) + main area.
 - Chart height is computed dynamically so each node gets at least 20 px.
 
