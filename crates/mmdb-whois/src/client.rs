@@ -623,7 +623,7 @@ mod tests {
             max_retries: 0,
             initial_backoff: Duration::from_millis(0),
             cache_dir: PathBuf::from("/tmp"),
-            cache_ttl: Duration::from_secs(3600),
+            cache_ttl: Duration::from_hours(1),
             auto_rir,
             iana_cache: Mutex::new(None),
         }

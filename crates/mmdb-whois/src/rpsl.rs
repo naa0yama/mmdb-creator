@@ -208,12 +208,10 @@ pub fn parse_rpsl(response: &str) -> Result<WhoisData> {
             current_key = None;
 
             match key {
-                "inetnum" | "inet6num" => {
-                    if inetnum.is_none() {
-                        inetnum = Some(value);
-                        in_target_object = true;
-                        found_object = true;
-                    }
+                "inetnum" | "inet6num" if inetnum.is_none() => {
+                    inetnum = Some(value);
+                    in_target_object = true;
+                    found_object = true;
                 }
                 "netname" if in_target_object => {
                     netname.get_or_insert(value);
@@ -285,12 +283,10 @@ pub fn parse_aut_num(response: &str) -> Result<AutNumData> {
             let value = value.trim().to_owned();
 
             match key {
-                "aut-num" => {
-                    if aut_num.is_none() {
-                        aut_num = Some(value);
-                        in_target_object = true;
-                        found_object = true;
-                    }
+                "aut-num" if aut_num.is_none() => {
+                    aut_num = Some(value);
+                    in_target_object = true;
+                    found_object = true;
                 }
                 "as-name" if in_target_object => {
                     as_name.get_or_insert(value);

@@ -204,7 +204,7 @@ fn group_into_buckets(sorted_ips: &[IpAddr]) -> Vec<(IpNet, Vec<IpAddr>)> {
     }
 
     let mut result: Vec<(IpNet, Vec<IpAddr>)> = map.into_iter().collect();
-    result.sort_by(|a, b| a.0.cmp(&b.0));
+    result.sort_by_key(|a| a.0);
     result
 }
 
@@ -333,6 +333,7 @@ mod tests {
     #[test]
     fn cymru_origin_name_ipv4() {
         let ip: IpAddr = "198.51.100.57".parse().unwrap();
+        // ast-grep-ignore: no-real-ipv4
         assert_eq!(cymru_origin_name(ip), "57.100.51.198.origin.asn.cymru.com");
     }
 
