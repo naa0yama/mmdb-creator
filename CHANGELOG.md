@@ -1,23 +1,33 @@
 # Changelog
 
 ## [v0.1.0](https://github.com/naa0yama/mmdb-creator/commits/v0.1.0) - 2026-06-03
+
 ### Features 🎉
+
 - refactor: split workspace into multi-crate structure by @naa0yama in https://github.com/naa0yama/mmdb-creator/pull/9
 - feat(enrich): field projection TUI, per-sheettype xlsx matching, and scan resume fix by @naa0yama in https://github.com/naa0yama/mmdb-creator/pull/32
 - feat(mmdb-web): Sankey report — ECharts DAG fix and layout/filter redesign by @naa0yama in https://github.com/naa0yama/mmdb-creator/pull/33
 - feat: Hop.device field and Sankey multi-granularity selector by @naa0yama in https://github.com/naa0yama/mmdb-creator/pull/34
 - feat(mmdb-web): hide host-routes by default in Sankey report by @naa0yama in https://github.com/naa0yama/mmdb-creator/pull/37
+
 ### Bug Fixes 🐌
+
 - fix(ci): grant actions write for octocov artifact cleanup by @naa0yama in https://github.com/naa0yama/mmdb-creator/pull/36
+
 ### Documentation 🗒️
+
 - fix/sankey-report: testdata RFC normalization, Sankey fixes, ast-grep enforcement by @naa0yama in https://github.com/naa0yama/mmdb-creator/pull/35
 - chore: backport deps bump, ast-grep IPv4 fix, testdata policy docs by @naa0yama in https://github.com/naa0yama/mmdb-creator/pull/38
+
 ### Dependency Updates 📦
+
 - Lock file maintenance by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/13
 - Pin Rust crate tokio to =1.52.3 by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/25
 - Update group:serde to v1.0.150 by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/43
 - Update Rust crate reqwest to v0.13.4 by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/45
+
 ### Development Environment 🔧
+
 - Update dependency openobserve/openobserve to v0.80.1 by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/5
 - Update dependency jdx/mise to v2026.4.28 by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/4
 - Update taiki-e/install-action action to v2.75.27 by @renovate[bot] in https://github.com/naa0yama/mmdb-creator/pull/6
