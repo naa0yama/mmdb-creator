@@ -332,9 +332,8 @@ mod tests {
 
     #[test]
     fn cymru_origin_name_ipv4() {
-        let ip: IpAddr = "198.51.100.57".parse().unwrap();
-        // ast-grep-ignore: no-real-ipv4
-        assert_eq!(cymru_origin_name(ip), "57.100.51.198.origin.asn.cymru.com");
+        let ip: IpAddr = "198.51.100.10".parse().unwrap();
+        assert_eq!(cymru_origin_name(ip), "10.100.51.198.origin.asn.cymru.com");
     }
 
     #[test]
@@ -558,11 +557,10 @@ mod tests {
         ];
         let buckets = group_into_buckets(&ips);
         assert_eq!(buckets.len(), 2);
-        if let [(k0, _), (k1, _)] = buckets.as_slice() {
-            assert!(k0 < k1);
-        } else {
-            panic!("expected exactly 2 buckets");
-        }
+        let mut iter = buckets.iter();
+        let (k0, _) = iter.next().unwrap();
+        let (k1, _) = iter.next().unwrap();
+        assert!(k0 < k1);
     }
 
     #[test]
