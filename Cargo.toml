@@ -41,7 +41,7 @@ mmdb-whois = { path = "crates/mmdb-whois" }
 mmdb-xlsx = { path = "crates/mmdb-xlsx" }
 
 ## Config
-toml = { version = "0.8", default-features = false, features = ["parse"] }
+toml = { version = "0.9", default-features = false, features = ["parse"] }
 toml_edit = { version = "0.22", features = ["serde"] }
 
 ## Core
